@@ -1,0 +1,149 @@
+{
+    "name": "@adadapted/js-sdk",
+    "version": "1.0.0",
+    "description": "The AdAdapted JS SDK.",
+    "main": "dist/index.commonjs2.js",
+    "module": "dist/index.commonjs2.js",
+    "types": "dist/src/index.d.ts",
+    "scripts": {
+        "prettier-fix": "prettier --write \"*.{ts,tsx,js,jsx,json,css,scss,md}\" \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
+        "compile": "tsc --version && tsc --project tsconfig.json --noEmit --noErrorTruncation --pretty",
+        "lint": "tslint --version && tslint --project tsconfig.json --config tslint.json",
+        "lint-sass": "sass-lint --version && sass-lint 'src/**/*.scss' -v -q",
+        "test-coverage": "rm -rf coverage && jest --version && jest --coverage",
+        "test": "jest --version && jest",
+        "clean-dist": "rm -rf dist",
+        "build-prod": "npm run clean-dist && webpack -p --env.prod=true --env.sourceMap=false",
+        "build-dev": "npm run clean-dist && webpack -p --env.prod=true --env.sourceMap=true",
+        "prettier": "prettier --list-different \"*.{ts,tsx,js,jsx,json,css,scss,md}\" \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
+        "lint-fix": "tslint --version && tslint --fix --project tsconfig.json --config tslint.json",
+        "npm-check-outdated": "npm outdated",
+        "npm-update": "npm update",
+        "zip-dist": "zip -r dist.zip dist",
+        "compile-tslint-rules": "rm -rf tslint-rules/out && tsc --version && tsc --project tslint-rules/tsconfig.json"
+    },
+    "keywords": [
+        "javascript",
+        "ios",
+        "android",
+        "adadapted",
+        "sdk",
+        "ad",
+        "ads"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://gitlab.com/adadapted/adadapted-js-sdk"
+    },
+    "author": "Jeramy Usher <jusher@adadapted.com> (https://gitlab.com/adadapted/adadapted-js-sdk)",
+    "license": "AdAdapted Platform License",
+    "bugs": {
+        "url": "https://gitlab.com/adadapted/adadapted-js-sdk/issues"
+    },
+    "homepage": "https://gitlab.com/adadapted/adadapted-js-sdk#readme",
+    "dependencies": {
+        "react": "^16.13.1",
+        "react-dom": "^16.13.1",
+        "axios": "^0.19.2"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.10.2",
+        "@babel/plugin-transform-typescript": "^7.10.1",
+        "@babel/preset-env": "^7.10.2",
+        "@babel/preset-react": "^7.10.1",
+        "@babel/preset-typescript": "^7.10.1",
+        "@testing-library/react": "^10.2.1",
+        "@types/autoprefixer": "^9.7.2",
+        "@types/axios": "^0.14.0",
+        "@types/copy-webpack-plugin": "^6.0.0",
+        "@types/enzyme": "^3.10.5",
+        "@types/enzyme-adapter-react-16": "^1.0.6",
+        "@types/jest": "^26.0.0",
+        "@types/jsdom": "^16.2.3",
+        "@types/mini-css-extract-plugin": "^0.9.1",
+        "@types/react": "^16.9.36",
+        "@types/react-dom": "^16.9.8",
+        "@types/webpack": "^4.41.17",
+        "@types/webpack-bundle-analyzer": "^3.8.0",
+        "@types/webpack-env": "^1.15.2",
+        "autoprefixer": "^9.8.0",
+        "awesome-typescript-loader": "^5.2.0",
+        "babel-loader": "^8.1.0",
+        "copy-webpack-plugin": "^6.0.2",
+        "css-loader": "^3.6.0",
+        "enzyme": "^3.11.0",
+        "enzyme-adapter-react-16": "^1.15.2",
+        "enzyme-to-json": "^3.5.0",
+        "fork-ts-checker-webpack-plugin": "^5.0.1",
+        "jest": "^26.0.1",
+        "jsdom": "^16.2.2",
+        "mini-css-extract-plugin": "^0.9.0",
+        "node-sass": "^4.14.1",
+        "postcss-loader": "^3.0.0",
+        "prettier": "^2.0.5",
+        "sass-lint": "^1.12.1",
+        "sass-loader": "^8.0.0",
+        "source-map-loader": "^1.0.0",
+        "style-loader": "^1.2.1",
+        "ts-jest": "^26.1.0",
+        "ts-loader": "^7.0.5",
+        "tslint": "^6.1.2",
+        "tslint-config-prettier": "^1.18.0",
+        "tslint-eslint-rules": "^5.4.0",
+        "tslint-react": "^5.0.0",
+        "type-zoo": "^3.3.0",
+        "typescript": "^3.9.5",
+        "webpack": "^4.43.0",
+        "webpack-bundle-analyzer": "^3.8.0",
+        "webpack-cli": "^3.3.11",
+        "webpack-dev-server": "^3.11.0",
+        "webpack-env": "^0.8.0"
+    },
+    "jest": {
+        "testURL": "http://localhost",
+        "snapshotSerializers": [
+            "enzyme-to-json/serializer"
+        ],
+        "setupFiles": [
+            "<rootDir>/jest.setup.ts"
+        ],
+        "transform": {
+            "^.+\\.[j|t]sx?$": "ts-jest"
+        },
+        "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+        "moduleFileExtensions": [
+            "ts",
+            "tsx",
+            "js",
+            "jsx",
+            "json"
+        ],
+        "modulePaths": [
+            "<rootDir>/node_modules"
+        ],
+        "moduleNameMapper": {
+            "\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>/__mocks__/fileMock.js",
+            "\\.(s?css)$": "<rootDir>/__mocks__/styleMock.js",
+            "^src/(.*)$": "<rootDir>/src/$1"
+        },
+        "collectCoverage": false,
+        "coverageDirectory": "coverage",
+        "collectCoverageFrom": [
+            "src/**/*.{js,jsx,ts,tsx}",
+            "!src/api/**/*.*",
+            "!src/**/*.d.ts",
+            "!src/index.tsx"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "branches": 5,
+                "functions": 5,
+                "lines": 5,
+                "statements": 5
+            }
+        },
+        "watchPathIgnorePatterns": [
+            "<rootDir>/jest.json"
+        ]
+    }
+}

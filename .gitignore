@@ -1,0 +1,18 @@
+# cache-loader webpack plugin's cache dir
+.cache-loader/
+
+# Project build output
+dist/
+dist.zip
+
+# NPM modules
+node_modules/
+
+# Code Coverage
+coverage/
+
+# Example Project
+example-react/node_modules/
+
+# Built Test NPM Package
+adadapted-react-sdk-*.tgz

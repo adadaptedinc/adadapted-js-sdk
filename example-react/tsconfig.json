@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "outDir": "./dist/",
+        "sourceMap": true,
+        "strict": true,
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "allowJs": true,
+        "target": "es5",
+        "jsx": "react",
+        "lib": ["DOM", "DOM.Iterable", "ES6", "ScriptHost"],
+        "allowSyntheticDefaultImports": false,
+        "forceConsistentCasingInFileNames": true,
+        "skipLibCheck": true
+    },
+    "include": ["./src/**/*", "./*"],
+    "exclude": []
+}
