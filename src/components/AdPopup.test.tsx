@@ -52,6 +52,6 @@ describe("AdPopup", () => {
             />
         );
 
-        wrapper.detach();
+        wrapper.unmount();
     });
 });
