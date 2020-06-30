@@ -161,11 +161,11 @@ module.exports = (env) => {
     };
 
     return [
-        createConfig("var"),
-        createConfig("commonjs"),
-        createConfig("commonjs2"),
-        createConfig("amd"),
-        createConfig("umd"),
+        // createConfig("var"),
+        // createConfig("commonjs"),
+        // createConfig("commonjs2"),
+        // createConfig("amd"),
+        // createConfig("umd"),
         createConfig("window"),
     ];
 };

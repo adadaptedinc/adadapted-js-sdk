@@ -94,14 +94,6 @@ namespace AdadaptedJsSdk {
         }
 
         /**
-         * Gets the list of available Ad Zones.
-         * @returns all available ad zones.
-         */
-        public getAdZones(): AdZoneInfo[] | undefined {
-            return this.adZones;
-        }
-
-        /**
          * @inheritDoc
          */
         constructor() {
