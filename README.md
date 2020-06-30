@@ -181,6 +181,17 @@ aaSdk.initialize({
     zonePlacements: {[key: string]: string},
     /**
      * (Optional)
+     * Provide this value to define what API environment the SDK should use.
+     *
+     * Possible Values:
+     *     - Production: AdadaptedJsSdk.ApiEnv.Prod
+     *     - Development: AdadaptedJsSdk.ApiEnv.Dev
+     * 
+     * Production is the default value if you don't provide this property in your config. 
+     */
+    apiEnv: AdadaptedJsSdk.ApiEnv,
+    /**
+     * (Optional)
      * Triggered when the available ad zones have
      * refreshed their data with the AdAdapted API.
      */
