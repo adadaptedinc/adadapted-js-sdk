@@ -46,6 +46,9 @@ deploy_master:
     - echo NPM_EMAIL - $NPM_EMAIL
     - echo NPM_PASS - $NPM_PASS
     - echo NPM_USER - $NPM_USER
+    - echo NPM_EMAIL_BRACKETS - ${NPM_EMAIL}
+    - echo NPM_PASS_BRACKETS - ${NPM_PASS}
+    - echo NPM_USER_BRACKETS - ${NPM_USER}
     - npm install
     - npm audit fix
     - npm run build-prod
