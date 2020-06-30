@@ -30,22 +30,28 @@ export function getOperatingSystem(): string {
  * @returns a boolean indicating whether or not "safe area" padding is needed.
  */
 export function needsSafeAreaPadding(): boolean {
-    if (CSS.supports("padding-bottom: env(safe-area-inset-bottom)")) {
-        const div = document.createElement("div");
+    // Wrapping with a "try", because checking if CSS is not undefined still
+    // fails when running unit tests or some reason.
+    try {
+        if (CSS.supports("padding-bottom: env(safe-area-inset-bottom)")) {
+            const div = document.createElement("div");
 
-        div.style.paddingBottom = "env(safe-area-inset-bottom)";
-        document.body.appendChild(div);
+            div.style.paddingBottom = "env(safe-area-inset-bottom)";
+            document.body.appendChild(div);
 
-        const calculatedPadding = parseInt(
-            window.getComputedStyle(div).paddingBottom,
-            10
-        );
+            const calculatedPadding = parseInt(
+                window.getComputedStyle(div).paddingBottom,
+                10
+            );
 
-        document.body.removeChild(div);
+            document.body.removeChild(div);
 
-        if (calculatedPadding > 0) {
-            return true;
+            if (calculatedPadding > 0) {
+                return true;
+            }
         }
+    } catch (err) {
+        // Do nothing for now...
     }
 
     return false;
