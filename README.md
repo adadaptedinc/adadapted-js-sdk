@@ -92,7 +92,6 @@ After the `aaSdk` property has been assigned, you can then call the `.initialize
 this.aaSdk.initialize({
     appId: "YOUR_APP_ID_HERE",
     deviceUUID: "THE_DEVICE_UUID_HERE",
-    apiEnv: AdadaptedJsSdk.ApiEnv.Prod,
     zonePlacements: {
         "12345": "testZoneId1",
         "12346": "testZoneId2"
