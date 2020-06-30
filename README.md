@@ -50,6 +50,8 @@ Next, place the following `<script/>` tag in your `index.html`(_or whatever your
 <script type="text/javascript" src="js/lib/adadapted-js-sdk.window.js"></script>
 ```
 
+**NOTE:** _Make sure to update the `src` attribute value with the correct path you placed the file in from step 1._
+
 ---
 
 **STEP 3:**
@@ -134,35 +136,39 @@ Call the following when the user is _presented_ a Keyword Intercept ad item that
 
 ```javascript
 sdkRef.reportKeywordInterceptTermsPresented([
-    aasdkSearchResults[index].term_id,
+    aasdkSearchResults[0].term_id,
+    aasdkSearchResults[1].term_id,
 ]);
 ```
 
-This will make an API call to AdAdapted to report the ad item that was displayed to the user. You will need to make this call for each ad item you chose to display to the user. Making sure to call this method when an ad item is presented to the user will enable accurate reporting in the reports AdAdapted provides you.
+This will make an API call to AdAdapted to report the ad item(s) that you decided to displayed to the user. The method accepts an array of `term_id` and must be provided to the method as an array even if you only displayed a single ad item to the user. Making sure to call this method when an ad item is presented to the user will enable accurate reporting in the reports AdAdapted provides you.
 
-Call the following when the user has _selected_ a Keyword Intercept ad item that you chose to present to them to choose from:
+Call the following when the user has _selected_ a Keyword Intercept ad item from the search result list you present to them:
 
 ```javascript
 sdkRef.reportKeywordInterceptTermSelected(selectedItem.item.term_id);
 ```
 
-**NOTE:** _The above code assumes you have the ad item object available to you to extract and send the `term_id` at the time the user selected the item from your list._
+**NOTE:** _The above code assumes you have the ad item object(`selectedItem`) available to you to extract and send the `term_id` at the time the user selected the item from your list._
 
 ## Available Methods
 
 ### initialize()
 
-The initialize method is where your SDK session is created. This method returns a promise that when completed, you will have a valid SDK session going forward and will be able to use other SDK methods. You should call this method as soon as possible and only once (upon page load / in your app constructor).
+The initialize method is where your SDK session is created. This method returns a promise that when complete, your reference to the SDK will have a valid SDK session going forward. Once you have a valid session, you will be able to successfully use other SDK methods. You should call this method as soon as possible and only once (upon page load / in your app constructor).
 
 ```javascript
 aaSdk.initialize({
     /**
      * The app ID provided to you by AdAdapted.
+     * If you have multiple variations of the app, you will be provided with multiple App IDs.
+     * For each App ID you have, you will need to determine the correct one to provide the SDK when initializing based on the users variation of the app.
      * Must be provided for the SDK to initialize.
      */
     appId: string,
     /**
      * The device UUID.
+     * You will need to extract the native device UUID and provide it.
      * Must be provided for the SDK to initialize.
      */
     deviceUUID: string,
@@ -217,7 +223,7 @@ string
 Once the SDK is initialized, this method can be called when performing a search operation within your app. Call this method either as the user types in a search term or when the user executes a search after the term is entered. A list of keyword search results will be returned by this method that can then be used to display dynamically along with the search results your app displays to the user. The final result of the search may have many items, in which case you would determine how many of them you would like to display.
 
 ```javascript
-aaSdk.performKeywordSearch((searchTerm: string));
+aaSdk.performKeywordSearch(searchTerm: string);
 ```
 
 **Return Type:**
@@ -271,14 +277,14 @@ The final result is sorted based on the following criteria:
 
 ### reportKeywordInterceptTermsPresented()
 
-This method must be called anytime a keyword suggestion is displayed as a result of the SDKs `performKeywordSearch()` method. Calling this method reports back the suggested keywords that were ultimately displayed to the user.
+This method must be called anytime a keyword suggestion(provided by the `performKeywordSearch()` method) is displayed to the user. Calling this method reports back these suggested keywords to AdAdapted.
 
 **NOTE:** _Making sure to call this method when a keyword is displayed will ensure AdAdapted can provide you with the most accurate reporting results._
 
 This method accepts a list of `term_id` of the displayed keywords. See `performKeywordSearch()` return type for more info on the `term_id` property.
 
 ```javascript
-aaSdk.reportKeywordInterceptTermsPresented((termIds: string[]));
+aaSdk.reportKeywordInterceptTermsPresented(termIds: string[]);
 ```
 
 **Return Type:**
@@ -291,14 +297,14 @@ void
 
 ### reportKeywordInterceptTermSelected()
 
-This method must be called anytime a keyword suggestion that was a result of the SDKs `performKeywordSearch()` method is selected by the user. Calling this method reports back the selected keyword.
+This method must be called anytime a keyword suggestion(provided by the `performKeywordSearch()` method) is selected by the user from your displayed search result list. Calling this method reports back the selected keyword to AdAdapted.
 
 **NOTE:** _Making sure to call this method when a keyword is selected will ensure AdAdapted can provide you with the most accurate reporting results._
 
 This method accepts the `term_id` from the selected keyword. See `performKeywordSearch()` return type for more info on the `term_id` property.
 
 ```javascript
-aaSdk.reportKeywordInterceptTermSelected((termId: string));
+aaSdk.reportKeywordInterceptTermSelected(termId: string);
 ```
 
 **Return Type:**
@@ -328,7 +334,7 @@ aaSdk.initialize({
 
 ### onAddToListTriggered()
 
-This callback callback is triggered when a user clicks an `add to list` ad zone. This method receives an `items` list that contains each item the user selected to add to their list.
+This callback method is triggered when a user clicks an `add to list` ad zone. This method receives an `items` list that contains each item the user selected to add to their list.
 
 If there are any other actions you need to perform when the user adds an ad item to their list, you can do so at this time.
 
