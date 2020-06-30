@@ -89,27 +89,26 @@ The above code defines an `aaSdk` property on your `app` object. Then, once the 
 After the `aaSdk` property has been assigned, you can then call the `.initialize()` method on it. This will initialize a valid SDK session with the configuration you provide.
 
 ```javascript
-this.aaSdk
-    .initialize({
-        appId: "YOUR_APP_ID_HERE",
-        deviceUUID: "THE_DEVICE_UUID_HERE",
-        zonePlacements: {
-            "12345": "testZoneId1",
-            "12346": "testZoneId2",
-        },
-        onAdZonesRefreshed: () => {
-            // ...
-        },
-        onAddToListTriggered: (items) => {
-            // ...
-        },
-    })
-    .then(() => {
+this.aaSdk.initialize({
+    appId: "YOUR_APP_ID_HERE",
+    deviceUUID: "THE_DEVICE_UUID_HERE",
+    zonePlacements: {
+        "12345": "testZoneId1",
+        "12346": "testZoneId2"
+    },
+    onAdZonesRefreshed: () => {
         // ...
-    })
-    .catch((err) => {
-        console.error(err);
-    });
+    },
+    onAddToListTriggered: (items) => {
+        // ...
+    },
+})
+.then(() => {
+    // ...
+})
+.catch((err) => {
+    console.error(err);
+});
 ```
 
 The `.initialize()` method is a promise and will resolve in the `.then()` callback once finished. If you provide an invalid configuration to the `.initialize()` method, the promise will resolve to the `.catch()` callback and report the initialization error.
@@ -179,6 +178,17 @@ aaSdk.initialize({
      * value: The element ID of the container element you want the zone rendered in.
      */
     zonePlacements: {[key: string]: string},
+    /**
+     * (Optional)
+     * Provide this value to define what API environment the SDK should use.
+     *
+     * Possible Values:
+     *     - Production: AdadaptedJsSdk.ApiEnv.Prod
+     *     - Development: AdadaptedJsSdk.ApiEnv.Dev
+     * 
+     * Production is the default value if you don't provide this property in your config. 
+     */
+    apiEnv: AdadaptedJsSdk.ApiEnv,
     /**
      * (Optional)
      * Triggered when the available ad zones have
