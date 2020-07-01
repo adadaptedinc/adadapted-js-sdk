@@ -398,7 +398,7 @@ aaSdk.initialize({
 
 ### Cordova Implementations
 
-#### Potential Issue #1
+#### Potential Issue 1
 
 The ad zones use an iframe to display the ad HTML. You can have issues with the content not displaying if you do not setup your app to allow iframe content to load.
 
