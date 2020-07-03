@@ -1,6 +1,6 @@
 {
     "name": "@adadapted/js-sdk",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "The AdAdapted JS SDK.",
     "main": "dist/index.commonjs2.js",
     "module": "dist/index.commonjs2.js",

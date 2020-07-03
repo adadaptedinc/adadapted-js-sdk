@@ -10,6 +10,7 @@ import {
     KeywordSearchResult,
     ZonePlacements,
 } from "./types";
+const packageJson = require("../package.json");
 
 /**
  * Class that acts as the AdAdapted SDK for JS.
@@ -330,11 +331,14 @@ namespace AdadaptedJsSdk {
                             : DeviceOS.ANDROID;
 
                     // Pass device info along with API call
+                    // NOTE: Ability to get more device data needs to be looked into further.
                     adadaptedApiRequests
                         .initializeSession(
                             {
                                 app_id: this.appId,
                                 udid: this.deviceUUID,
+                                device_udid: this.deviceUUID,
+                                sdk_version: packageJson.version,
                                 device_os: this.deviceOs,
                             },
                             this.deviceOs,
