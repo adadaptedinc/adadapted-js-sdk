@@ -36,9 +36,9 @@ Copy the following file:
 
 and place it into a designated folder within your project like so:
 
-![Example: js/lib/adadapted-js-sdk.window.js](images/README-img-1.png)
+`js/lib/adadapted-js-sdk.window.js`
 
-**NOTE:** _The file in the image above can be placed at any location._
+**NOTE:** _The file above can be placed at any location._
 
 ---
 
@@ -398,7 +398,7 @@ aaSdk.initialize({
 
 ### Cordova Implementations
 
-#### Potential Issue #1
+#### Potential Issue 1
 
 The ad zones use an iframe to display the ad HTML. You can have issues with the content not displaying if you do not setup your app to allow iframe content to load.
 
