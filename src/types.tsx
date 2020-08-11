@@ -122,9 +122,9 @@ export interface InitializeProps {
      */
     appId: string;
     /**
-     * The UUID for the device. Client must provide this value.
+     * The unique ID used to identify the user. Client must provide this value.
      */
-    deviceUUID: string;
+    advertiserId: string;
     /**
      * A map of {Zone ID -> Element ID}. This map must be provided
      * in order to see ad zones displayed. If the client is only using

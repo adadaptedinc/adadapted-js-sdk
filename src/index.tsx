@@ -25,9 +25,9 @@ namespace AdadaptedJsSdk {
          */
         private appId: string = "";
         /**
-         * The device UUID used to send to API endpoints.
+         * The ID used to send to API endpoints.
          */
-        private deviceUUID: string = "";
+        private advertiserId: string = "";
         /**
          * The zone placements used to add the created ad zones to.
          */
@@ -130,7 +130,7 @@ namespace AdadaptedJsSdk {
                                 key={adZoneId}
                                 appId={this.appId}
                                 sessionId={this.sessionId!}
-                                udid={this.deviceUUID}
+                                udid={this.advertiserId}
                                 deviceOs={this.deviceOs!}
                                 apiEnv={this.apiEnv}
                                 adZoneData={adZones[adZoneId]}
@@ -168,7 +168,7 @@ namespace AdadaptedJsSdk {
                         {
                             aid: this.appId,
                             sid: this.sessionId!,
-                            uid: this.deviceUUID,
+                            uid: this.advertiserId,
                         },
                         this.deviceOs!,
                         this.apiEnv
@@ -235,7 +235,7 @@ namespace AdadaptedJsSdk {
                     {
                         aid: this.appId,
                         sid: this.sessionId!,
-                        uid: this.deviceUUID,
+                        uid: this.advertiserId,
                     },
                     this.deviceOs!,
                     this.apiEnv
@@ -289,18 +289,18 @@ namespace AdadaptedJsSdk {
                         "App ID must be provided for the AdAdapted SDK to be initialized."
                     );
                 } else if (
-                    props.deviceUUID === undefined ||
-                    props.deviceUUID === null
+                    props.advertiserId === undefined ||
+                    props.advertiserId === null
                 ) {
                     reject(
-                        "Device UUID must be provided for the AdAdapted SDK to be initialized."
+                        "A unique identifier(advertiserId) must be provided for the AdAdapted SDK to be initialized."
                     );
                 } else {
                     // Set the app ID.
                     this.appId = props.appId;
 
-                    // Set the device UUID.
-                    this.deviceUUID = props.deviceUUID;
+                    // Set the unique ID.
+                    this.advertiserId = props.advertiserId;
 
                     // Set the zone placements provided by the client.
                     this.zonePlacements = props.zonePlacements;
@@ -336,8 +336,8 @@ namespace AdadaptedJsSdk {
                         .initializeSession(
                             {
                                 app_id: this.appId,
-                                udid: this.deviceUUID,
-                                device_udid: this.deviceUUID,
+                                udid: this.advertiserId,
+                                device_udid: this.advertiserId,
                                 sdk_version: packageJson.version,
                                 device_os: this.deviceOs,
                             },
@@ -468,7 +468,7 @@ namespace AdadaptedJsSdk {
                     .reportInterceptEvent(
                         {
                             app_id: this.appId,
-                            udid: this.deviceUUID,
+                            udid: this.advertiserId,
                             session_id: this.sessionId,
                             events: finalEventsList,
                         },
@@ -509,7 +509,7 @@ namespace AdadaptedJsSdk {
                     .reportInterceptEvent(
                         {
                             app_id: this.appId,
-                            udid: this.deviceUUID,
+                            udid: this.advertiserId,
                             session_id: this.sessionId,
                             events: [
                                 {
@@ -585,7 +585,7 @@ namespace AdadaptedJsSdk {
                     .reportInterceptEvent(
                         {
                             app_id: this.appId,
-                            udid: this.deviceUUID,
+                            udid: this.advertiserId,
                             session_id: this.sessionId,
                             events: termEvents,
                         },
