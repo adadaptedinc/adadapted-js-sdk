@@ -8,6 +8,7 @@ import { adadaptedApiTypes } from "../api/adadaptedApiTypes";
 import { safeInvoke } from "../util";
 import { AdPopup } from "./AdPopup";
 import { ApiEnv, DeviceOS } from "../types";
+import packageJson from "../../package.json";
 
 /**
  * Props interface for {@link AdZone}.
@@ -223,6 +224,7 @@ export class AdZone extends React.Component<Props, State> {
                     app_id: this.props.appId,
                     session_id: this.props.sessionId,
                     udid: this.props.udid,
+                    sdk_version: packageJson.version,
                     events: [
                         {
                             ad_id: currentAd.ad_id,

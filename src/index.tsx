@@ -10,7 +10,7 @@ import {
     KeywordSearchResult,
     ZonePlacements,
 } from "./types";
-const packageJson = require("../package.json");
+import packageJson from "../package.json";
 
 /**
  * Class that acts as the AdAdapted SDK for JS.
@@ -470,6 +470,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: finalEventsList,
                         },
                         this.deviceOs!,
@@ -511,6 +512,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: [
                                 {
                                     term_id: termObj.term_id,
@@ -587,6 +589,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: termEvents,
                         },
                         this.deviceOs!,

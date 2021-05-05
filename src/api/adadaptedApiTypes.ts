@@ -485,6 +485,10 @@ export namespace adadaptedApiTypes {
              */
             session_id: string;
             /**
+             * The AdAdapted SDK version number.
+             */
+            sdk_version: string;
+            /**
              * Events to report.
              */
             events: models.ReportedAdEvent[];
@@ -524,6 +528,10 @@ export namespace adadaptedApiTypes {
              * The current session ID.
              */
             session_id: string;
+            /**
+             * The AdAdapted SDK version number.
+             */
+            sdk_version: string;
             /**
              * Events to report.
              */

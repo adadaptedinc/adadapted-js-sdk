@@ -16,3 +16,4 @@ example-react/node_modules/
 
 # Built Test NPM Package
 adadapted-react-sdk-*.tgz
+.DS_Store
