@@ -10,7 +10,7 @@ import {
     KeywordSearchResult,
     ZonePlacements,
 } from "./types";
-const packageJson = require("../package.json");
+import packageJson from "../package.json";
 
 /**
  * Class that acts as the AdAdapted SDK for JS.
@@ -28,6 +28,18 @@ namespace AdadaptedJsSdk {
          * The ID used to send to API endpoints.
          */
         private advertiserId: string = "";
+        /**
+         * The ID used for bundle identification.
+         */
+        private bundleId: string = "js_default_bundleID";
+        /**
+         * The version information for bundle identifcation.
+         */
+        private bundleVersion: string = "js_default_bundleVersion";
+        /**
+         * The version information for bundle identifcation.
+         */
+        private allowRetargeting: boolean = true;
         /**
          * The zone placements used to add the created ad zones to.
          */
@@ -295,12 +307,28 @@ namespace AdadaptedJsSdk {
                     reject(
                         "A unique identifier(advertiserId) must be provided for the AdAdapted SDK to be initialized."
                     );
+                } else if (
+                    props.allowRetargeting === undefined ||
+                    props.allowRetargeting === null
+                ) {
+                    reject(
+                        "A user's privacy decision to opt-in or opt-out for ad retargeting(allowRetargeting) must be provided for the AdAdapted SDK to be initialized."
+                    );
                 } else {
                     // Set the app ID.
                     this.appId = props.appId;
 
                     // Set the unique ID.
                     this.advertiserId = props.advertiserId;
+
+                    // Set the bundle ID (default value used if not provided).
+                    this.bundleId = props.bundleId;
+
+                    // Set the bundle version (default value used if not provided).
+                    this.bundleVersion = props.bundleVersion;
+
+                    // Set whether the user is allowed to be retargetted by ads.
+                    this.allowRetargeting = props.allowRetargeting;
 
                     // Set the zone placements provided by the client.
                     this.zonePlacements = props.zonePlacements;
@@ -340,6 +368,9 @@ namespace AdadaptedJsSdk {
                                 device_udid: this.advertiserId,
                                 sdk_version: packageJson.version,
                                 device_os: this.deviceOs,
+                                bundle_id: this.bundleId,
+                                bundle_version: this.bundleVersion,
+                                allow_retargeting: this.allowRetargeting,
                             },
                             this.deviceOs,
                             this.apiEnv
@@ -470,6 +501,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: finalEventsList,
                         },
                         this.deviceOs!,
@@ -511,6 +543,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: [
                                 {
                                     term_id: termObj.term_id,
@@ -587,6 +620,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: termEvents,
                         },
                         this.deviceOs!,

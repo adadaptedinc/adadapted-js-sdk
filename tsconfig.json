@@ -10,6 +10,7 @@
         "jsx": "react",
         "lib": ["es2017", "es7", "es6", "dom"],
         "allowSyntheticDefaultImports": true,
+        "resolveJsonModule": true,
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
         "skipLibCheck": true,
