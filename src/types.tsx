@@ -126,6 +126,18 @@ export interface InitializeProps {
      */
     advertiserId: string;
     /**
+     * The unique bundle ID used to identify the user.
+     */
+    bundleId: string;
+    /**
+     * The unique bundle version used to identify the user.
+     */
+    bundleVersion: string;
+    /**
+     * Allow ad retargeting.
+     */
+    allowRetargeting: boolean;
+    /**
      * A map of {Zone ID -> Element ID}. This map must be provided
      * in order to see ad zones displayed. If the client is only using
      * the Keyword Intercept feature, then this zone placement mapping
