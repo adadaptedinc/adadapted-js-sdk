@@ -4,7 +4,7 @@
  */
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { adadaptedApiTypes } from "../api/adadaptedApiTypes";
+import { Ad, DetailedListItem } from "../api/adadaptedApiTypes";
 import { needsSafeAreaPadding, safeInvoke } from "../util";
 
 /**
@@ -14,11 +14,17 @@ interface Props {
     /**
      * The add to display in the popup.
      */
-    ad: adadaptedApiTypes.models.Ad;
+    ad: Ad;
     /**
      * Triggered when the popup is closing.
      */
     onClose?(): void;
+    /**
+     * Triggered when an ad circular item is clicked and
+     * the item should be "added to list".
+     * @param item - The item to add to list.
+     */
+    onAddToListItemClicked(item: DetailedListItem): void;
 }
 
 /**
