@@ -367,7 +367,7 @@ namespace AdadaptedJsSdk {
          * send to the client for adding to a user's list.
          * @param event - The event containing URL related info.
          */
-        private handleDeepLink(event: any): void {
+        public handleDeepLink(event: any): void {
             const searchStr = "data=";
             const dataIndex: number = event["url"].indexOf(searchStr);
 
