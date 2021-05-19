@@ -4,7 +4,7 @@
  */
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { adadaptedApiTypes } from "../api/adadaptedApiTypes";
+import { Ad, DetailedListItem } from "../api/adadaptedApiTypes";
 import { needsSafeAreaPadding, safeInvoke } from "../util";
 
 /**
@@ -14,11 +14,17 @@ interface Props {
     /**
      * The add to display in the popup.
      */
-    ad: adadaptedApiTypes.models.Ad;
+    ad: Ad;
     /**
      * Triggered when the popup is closing.
      */
     onClose?(): void;
+    /**
+     * Triggered when an ad circular item is clicked and
+     * the item should be "added to list".
+     * @param item - The item to add to list.
+     */
+    onAddToListItemClicked(item: DetailedListItem): void;
 }
 
 /**
@@ -33,6 +39,16 @@ interface State {
      * if true, we need to account for "safe area" padding for the device.
      */
     isSafeAreaPaddingRequired: boolean;
+}
+
+/**
+ * Allows access to content window for circular js
+ */
+interface HTMLIFrameElement {
+    /**
+     * Allow content window usage as any
+     */
+    contentWindow?: any;
 }
 
 /**
@@ -68,6 +84,45 @@ export class AdPopup extends React.Component<Props, State> {
     public componentWillUnmount(): void {
         document.body.removeChild(this.adPortalContainer);
         document.body.style.overflow = "auto";
+    }
+
+    /**
+     * This is responsible for hooking into the circular ad JS and getting the item data.
+     */
+    public componentDidMount(): void {
+        let listItem: DetailedListItem;
+        const triggerItemClicked = (item: DetailedListItem, context = this) => {
+            this.props.onAddToListItemClicked(item);
+        };
+
+        const iframe = document!.getElementById(
+            "AdPopupIframe"
+        )! as HTMLIFrameElement;
+        iframe!.contentWindow!.AdAdapted = {
+            addItemToList: function addItemToList(
+                payloadId: string,
+                trackingId: string,
+                productTitle: string,
+                productBrand: string,
+                productCategory: string,
+                productBarcode: string,
+                retailerSku: string,
+                productDiscount: string,
+                productImage: string
+            ): void {
+                listItem = {
+                    tracking_id: trackingId,
+                    product_title: productTitle,
+                    product_brand: productBrand,
+                    product_category: productCategory,
+                    product_barcode: productBarcode,
+                    product_sku: retailerSku,
+                    product_discount: productDiscount,
+                    product_image: productImage,
+                };
+                triggerItemClicked(listItem);
+            },
+        };
     }
 
     /**
@@ -147,6 +202,7 @@ export class AdPopup extends React.Component<Props, State> {
                 </div>
                 <iframe
                     className="AdPopup__content"
+                    id="AdPopupIframe"
                     src={this.props.ad.action_path}
                     scrolling="yes"
                     style={{

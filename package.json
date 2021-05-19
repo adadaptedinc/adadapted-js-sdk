@@ -1,6 +1,6 @@
 {
     "name": "@adadapted/js-sdk",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "description": "The AdAdapted JS SDK.",
     "main": "dist/index.commonjs2.js",
     "module": "dist/index.commonjs2.js",
@@ -42,9 +42,11 @@
     },
     "homepage": "https://gitlab.com/adadapted/adadapted-js-sdk#readme",
     "dependencies": {
-        "react": "^16.13.1",
+        "@types/react-native-base64": "^0.1.0",
+        "axios": "^0.19.2",
+        "react": "^16.14.0",
         "react-dom": "^16.13.1",
-        "axios": "^0.19.2"
+        "react-native-base64": "^0.2.1"
     },
     "devDependencies": {
         "@babel/core": "^7.10.3",

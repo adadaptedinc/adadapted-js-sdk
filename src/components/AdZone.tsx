@@ -4,10 +4,17 @@
  */
 import * as React from "react";
 import * as adadaptedApiRequests from "../api/adadaptedApiRequests";
-import { adadaptedApiTypes } from "../api/adadaptedApiTypes";
+import {
+    Ad,
+    AdActionType,
+    DetailedListItem,
+    ReportedEventType,
+    Zone,
+} from "../api/adadaptedApiTypes";
 import { safeInvoke } from "../util";
 import { AdPopup } from "./AdPopup";
 import { ApiEnv, DeviceOS } from "../types";
+import packageJson from "../../package.json";
 
 /**
  * Props interface for {@link AdZone}.
@@ -36,14 +43,12 @@ interface Props {
     /**
      * The ad zone data.
      */
-    adZoneData: adadaptedApiTypes.models.Zone;
+    adZoneData: Zone;
     /**
      * Callback that gets triggered when an "add to list" item/items are clicked.
      * @param items - The array of items to "add to list".
      */
-    onAddToListTriggered?(
-        items: adadaptedApiTypes.models.DetailedListItem[]
-    ): void;
+    onAddToListTriggered?(items: DetailedListItem[]): void;
 }
 
 /**
@@ -150,6 +155,9 @@ export class AdZone extends React.Component<Props, State> {
                                 isAdPopupOpen: false,
                             });
                         }}
+                        onAddToListItemClicked={(item) => {
+                            safeInvoke(this.props.onAddToListTriggered, [item]);
+                        }}
                     />
                 ) : undefined}
             </div>
@@ -174,12 +182,9 @@ export class AdZone extends React.Component<Props, State> {
         // } else
 
         if (
-            (currentAd.action_type ===
-                adadaptedApiTypes.models.AdActionType.POPUP ||
-                currentAd.action_type ===
-                    adadaptedApiTypes.models.AdActionType.LINK ||
-                currentAd.action_type ===
-                    adadaptedApiTypes.models.AdActionType.EXTERNAL) &&
+            (currentAd.action_type === AdActionType.POPUP ||
+                currentAd.action_type === AdActionType.LINK ||
+                currentAd.action_type === AdActionType.EXTERNAL) &&
             currentAd.action_path
         ) {
             // Action Type: POPUP or LINK
@@ -187,8 +192,7 @@ export class AdZone extends React.Component<Props, State> {
                 isAdPopupOpen: true,
             });
         } else if (
-            currentAd.action_type ===
-                adadaptedApiTypes.models.AdActionType.CONTENT &&
+            currentAd.action_type === AdActionType.CONTENT &&
             currentAd.payload &&
             currentAd.payload.detailed_list_items
         ) {
@@ -198,10 +202,7 @@ export class AdZone extends React.Component<Props, State> {
             );
         }
 
-        this.triggerReportAdEvent(
-            currentAd,
-            adadaptedApiTypes.models.ReportedEventType.INTERACTION
-        );
+        this.triggerReportAdEvent(currentAd, ReportedEventType.INTERACTION);
     }
 
     /**
@@ -210,8 +211,8 @@ export class AdZone extends React.Component<Props, State> {
      * @param eventType - The event type for the reported event.
      */
     private triggerReportAdEvent(
-        currentAd: adadaptedApiTypes.models.Ad,
-        eventType: adadaptedApiTypes.models.ReportedEventType
+        currentAd: Ad,
+        eventType: ReportedEventType
     ): void {
         // The event timestamp has to be sent as a unix timestamp.
         const currentTs = Math.round(new Date().getTime() / 1000);
@@ -223,6 +224,7 @@ export class AdZone extends React.Component<Props, State> {
                     app_id: this.props.appId,
                     session_id: this.props.sessionId,
                     udid: this.props.udid,
+                    sdk_version: packageJson.version,
                     events: [
                         {
                             ad_id: currentAd.ad_id,
@@ -301,7 +303,7 @@ export class AdZone extends React.Component<Props, State> {
         // Trigger an impression event for the ad.
         this.triggerReportAdEvent(
             this.props.adZoneData.ads[this.state.adIndexShown],
-            adadaptedApiTypes.models.ReportedEventType.IMPRESSION
+            ReportedEventType.IMPRESSION
         );
     }
 }

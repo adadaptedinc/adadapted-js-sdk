@@ -1,7 +1,21 @@
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as adadaptedApiRequests from "./api/adadaptedApiRequests";
-import { adadaptedApiTypes } from "./api/adadaptedApiTypes";
+import {
+    AdSession,
+    DetailedListItem,
+    KeywordIntercepts,
+    KeywordSearchTerm,
+    ListManagerEvent,
+    ListManagerEventName,
+    ListManagerEventSource,
+    OutOfAppDataPayload,
+    PayloadStatus,
+    ReportedEventType,
+    ReportedInterceptEvent,
+    ReportListManagerDataRequest,
+    Zone,
+} from "./api/adadaptedApiTypes";
 import { AdZone } from "./components/AdZone";
 import { safeInvoke, getOperatingSystem, totalProperties } from "./util";
 import {
@@ -10,7 +24,8 @@ import {
     KeywordSearchResult,
     ZonePlacements,
 } from "./types";
-const packageJson = require("../package.json");
+import packageJson from "../package.json";
+import base64 from "react-native-base64";
 
 /**
  * Class that acts as the AdAdapted SDK for JS.
@@ -29,6 +44,18 @@ namespace AdadaptedJsSdk {
          */
         private advertiserId: string = "";
         /**
+         * The ID used for bundle identification.
+         */
+        private bundleId: string = "js_default_bundleID";
+        /**
+         * The version information for bundle identifcation.
+         */
+        private bundleVersion: string = "js_default_bundleVersion";
+        /**
+         * The version information for bundle identifcation.
+         */
+        private allowRetargeting: boolean = true;
+        /**
          * The zone placements used to add the created ad zones to.
          */
         private zonePlacements: ZonePlacements | undefined;
@@ -36,6 +63,14 @@ namespace AdadaptedJsSdk {
          * The API environment to use when making API calls.
          */
         private apiEnv: ApiEnv;
+        /**
+         * The API environment to use when making API calls for List Manager.
+         */
+        private listManagerApiEnv: ListManagerApiEnv;
+        /**
+         * The API environment to use when making API calls for the Payload server.
+         */
+        private payloadApiEnv: PayloadApiEnv;
         /**
          * The device operating system.
          */
@@ -48,7 +83,7 @@ namespace AdadaptedJsSdk {
          * All current Session/Ad info.
          * This info can be refreshed based on the set interval.
          */
-        private sessionInfo: adadaptedApiTypes.models.AdSession | undefined;
+        private sessionInfo: AdSession | undefined;
         /**
          * The available ad zones.
          */
@@ -74,18 +109,25 @@ namespace AdadaptedJsSdk {
          * The current available keyword intercepts that can
          * be used when a search is provided by the user.
          */
-        private keywordIntercepts:
-            | adadaptedApiTypes.models.KeywordIntercepts
-            | undefined;
+        private keywordIntercepts: KeywordIntercepts | undefined;
         /**
          * If provided, triggers when an "add to list" item is
          * clicked in an ad zone or in-app popup.
          * @param items - The array of items to "add to list".
+         * @param isExternalPayload - If true, the items are from an external payload.
          */
         private onAddToListTriggered: (
-            items: adadaptedApiTypes.models.DetailedListItem[]
+            items: DetailedListItem[],
+            isExternalPayload?: boolean
         ) => void | undefined;
-
+        /**
+         * If provided, triggers when an "add to list"
+         * occurs by means of an "out of app" data payload.
+         * @param payloads - All payloads the client must go through.
+         */
+        private onOutOfAppPayloadAvailable: (
+            payloads: OutOfAppDataPayload[]
+        ) => void | undefined;
         /**
          * Gets the Session ID.
          * @returns the Session ID.
@@ -99,16 +141,23 @@ namespace AdadaptedJsSdk {
          */
         constructor() {
             this.apiEnv = ApiEnv.Prod;
+            this.listManagerApiEnv = ListManagerApiEnv.Prod;
+            this.payloadApiEnv = PayloadApiEnv.Prod;
             this.onAdZonesRefreshed = () => {
                 // Defaulting to empty method.
             };
             this.onAddToListTriggered = () => {
                 // Defaulting to empty method.
             };
+            this.onOutOfAppPayloadAvailable = () => {
+                // Defaulting to empty method.
+            };
             this.keywordInterceptSearchValue = "";
 
             this.initialize = this.initialize.bind(this);
             this.unmount = this.unmount.bind(this);
+            this.handleAppStateChange = this.handleAppStateChange.bind(this);
+            this.handleDeepLink = this.handleDeepLink.bind(this);
         }
 
         /**
@@ -117,7 +166,7 @@ namespace AdadaptedJsSdk {
          * @returns the array of Ad Zone Info objects.
          */
         private generateAdZones(adZones: {
-            [key: number]: adadaptedApiTypes.models.Zone;
+            [key: number]: Zone;
         }): AdZoneInfo[] {
             const adZoneInfoList: AdZoneInfo[] = [];
 
@@ -200,9 +249,7 @@ namespace AdadaptedJsSdk {
          * Renders or updates the ad zone data.
          * @param adZonesData - All ad zone data needed for the zones.
          */
-        private renderAdZones(adZonesData: {
-            [key: number]: adadaptedApiTypes.models.Zone;
-        }): void {
+        private renderAdZones(adZonesData: { [key: number]: Zone }): void {
             if (
                 this.zonePlacements !== undefined &&
                 this.zonePlacements !== null &&
@@ -254,8 +301,8 @@ namespace AdadaptedJsSdk {
          */
         private getKeywordInterceptTerm(
             termId: string
-        ): adadaptedApiTypes.models.KeywordSearchTerm | undefined {
-            let term: adadaptedApiTypes.models.KeywordSearchTerm | undefined;
+        ): KeywordSearchTerm | undefined {
+            let term: KeywordSearchTerm | undefined;
 
             if (this.keywordIntercepts && termId) {
                 for (const termObj of this.keywordIntercepts.terms) {
@@ -277,6 +324,151 @@ namespace AdadaptedJsSdk {
         }
 
         /**
+         * Gets all data needed to make a List Manager API request.
+         * @param eventSource - The event source.
+         * @param eventName - The event name.
+         * @param itemNames - The items to report.
+         * @param listName - The list associated to the items, if any.
+         * @returns the data required for the request.
+         */
+        private getListManagerApiRequestData(
+            eventSource: ListManagerEventSource,
+            eventName: ListManagerEventName,
+            itemNames: string[],
+            listName?: string
+        ): ReportListManagerDataRequest {
+            const eventList: ListManagerEvent[] = [];
+
+            for (const itemName of itemNames) {
+                eventList.push({
+                    event_source: eventSource,
+                    event_name: eventName,
+                    event_timestamp: this.getCurrentUnixTimestamp(),
+                    event_params: {
+                        item_name: itemName,
+                        list_name: listName,
+                    },
+                });
+            }
+
+            return {
+                session_id: this.sessionId!,
+                app_id: this.appId,
+                udid: this.advertiserId,
+                events: eventList,
+                sdk_version: packageJson.version,
+                bundle_id: this.bundleId,
+                bundle_version: this.bundleVersion,
+            };
+        }
+
+        /**
+         * Takes the deep link URL and extracts out the payload items data to
+         * send to the client for adding to a user's list.
+         * @param event - The event containing URL related info.
+         */
+        public handleDeepLink(event: any): void {
+            const searchStr = "data=";
+            const dataIndex: number = event["url"].indexOf(searchStr);
+
+            if (dataIndex !== -1) {
+                const encodedData = event.url.substr(
+                    dataIndex + searchStr.length
+                );
+                const payloadData = JSON.parse(base64.decode(encodedData));
+                const payloadId = payloadData["payload_id"];
+                const itemDataList = payloadData["detailed_list_items"];
+
+                if (itemDataList && itemDataList.length > 0) {
+                    const finalItemList: OutOfAppDataPayload[] = [];
+
+                    for (const itemData of itemDataList) {
+                        finalItemList.push({
+                            payload_id: payloadId,
+                            detailed_list_items: [
+                                {
+                                    product_title: itemData["product_title"],
+                                    product_brand: itemData["product_brand"],
+                                    product_category:
+                                        itemData["product_category"],
+                                    product_barcode:
+                                        itemData["product_barcode"],
+                                    product_discount:
+                                        itemData["product_discount"],
+                                    product_image: itemData["product_image"],
+                                    product_sku: itemData["product_sku"],
+                                },
+                            ],
+                        });
+                    }
+
+                    // Send the items to the client, so they can add them to the list.
+                    safeInvoke(this.onOutOfAppPayloadAvailable, finalItemList);
+                }
+            }
+        }
+
+        /**
+         * Triggered when the state of the app changes.
+         * @param state - The current state of the app.
+         */
+        private handleAppStateChange(state: string): void {
+            if (state === "active") {
+                this.getPayloadItemData();
+            }
+        }
+
+        /**
+         * Gets all available Payload server item data for the user.
+         */
+        private getPayloadItemData(): void {
+            adadaptedApiRequests
+                .retrievePayloadContent(
+                    {
+                        app_id: this.appId,
+                        session_id: this.sessionId!,
+                        udid: this.advertiserId,
+                    },
+                    this.payloadApiEnv
+                )
+                .then((response) => {
+                    const finalItemList: OutOfAppDataPayload[] = [];
+
+                    for (const payload of response.data.payloads) {
+                        for (const itemData of payload.detailed_list_items) {
+                            finalItemList.push({
+                                payload_id: payload.payload_id,
+                                detailed_list_items: [
+                                    {
+                                        product_title:
+                                            itemData["product_title"],
+                                        product_brand:
+                                            itemData["product_brand"],
+                                        product_category:
+                                            itemData["product_category"],
+                                        product_barcode:
+                                            itemData["product_barcode"],
+                                        product_discount:
+                                            itemData["product_discount"],
+                                        product_image:
+                                            itemData["product_image"],
+                                        product_sku: itemData["product_sku"],
+                                    },
+                                ],
+                            });
+                        }
+                    }
+
+                    // Send the items to the client, so they can add them to the list.
+                    safeInvoke(this.onOutOfAppPayloadAvailable, finalItemList);
+                })
+                .catch(() => {
+                    console.error("Payload delivery attempt failed.");
+                    // Do nothing.
+                });
+        }
+
+        /**
          * Initializes the session for the AdAdapted API and sets up the SDK.
          * @param props - The props used to initialize the SDK.
          * @returns a Promise of void.
@@ -295,12 +487,28 @@ namespace AdadaptedJsSdk {
                     reject(
                         "A unique identifier(advertiserId) must be provided for the AdAdapted SDK to be initialized."
                     );
+                } else if (
+                    props.allowRetargeting === undefined ||
+                    props.allowRetargeting === null
+                ) {
+                    reject(
+                        "A user's privacy decision to opt-in or opt-out for ad retargeting(allowRetargeting) must be provided for the AdAdapted SDK to be initialized."
+                    );
                 } else {
                     // Set the app ID.
                     this.appId = props.appId;
 
                     // Set the unique ID.
                     this.advertiserId = props.advertiserId;
+
+                    // Set the bundle ID (default value used if not provided).
+                    this.bundleId = props.bundleId;
+
+                    // Set the bundle version (default value used if not provided).
+                    this.bundleVersion = props.bundleVersion;
+
+                    // Set whether the user is allowed to be retargetted by ads.
+                    this.allowRetargeting = props.allowRetargeting;
 
                     // Set the zone placements provided by the client.
                     this.zonePlacements = props.zonePlacements;
@@ -313,6 +521,21 @@ namespace AdadaptedJsSdk {
                         this.apiEnv = ApiEnv.Prod;
                     }
 
+                    // Base the List Manager/Payload API environment off what
+                    // the user provides for the props.apiEnv value.
+                    if (props.apiEnv) {
+                        if (props.apiEnv === ApiEnv.Prod) {
+                            this.listManagerApiEnv = ListManagerApiEnv.Prod;
+                            this.payloadApiEnv = PayloadApiEnv.Prod;
+                        } else {
+                            this.listManagerApiEnv = ListManagerApiEnv.Dev;
+                            this.payloadApiEnv = PayloadApiEnv.Dev;
+                        }
+                    } else {
+                        this.listManagerApiEnv = ListManagerApiEnv.Prod;
+                        this.payloadApiEnv = PayloadApiEnv.Prod;
+                    }
+
                     // If the callback for onAdZonesRefreshed was provided, set it
                     // globally for use when the method needs to be triggered.
                     if (props.onAdZonesRefreshed) {
@@ -323,6 +546,13 @@ namespace AdadaptedJsSdk {
                     // globally for use when the method needs to be triggered.
                     if (props.onAddToListTriggered) {
                         this.onAddToListTriggered = props.onAddToListTriggered;
+                    }
+
+                    // If the callback for onOutOfAppPayloadAvailable was provided, set it
+                    // globally for use when the method needs to be triggered.
+                    if (props.onOutOfAppPayloadAvailable) {
+                        this.onOutOfAppPayloadAvailable =
+                            props.onOutOfAppPayloadAvailable;
                     }
 
                     this.deviceOs =
@@ -340,6 +570,9 @@ namespace AdadaptedJsSdk {
                                 device_udid: this.advertiserId,
                                 sdk_version: packageJson.version,
                                 device_os: this.deviceOs,
+                                bundle_id: this.bundleId,
+                                bundle_version: this.bundleVersion,
+                                allow_retargeting: this.allowRetargeting,
                             },
                             this.deviceOs,
                             this.apiEnv
@@ -358,6 +591,10 @@ namespace AdadaptedJsSdk {
                             // We don't need to wait for this to complete
                             // prior to resolving initialization of the SDK.
                             this.getKeywordIntercepts();
+
+                            // Make the initial call to the Payload data server to see if
+                            // the user has any outstanding items to be added to list.
+                            this.getPayloadItemData();
 
                             resolve();
                         })
@@ -392,7 +629,7 @@ namespace AdadaptedJsSdk {
             ) {
                 searchTerm = searchTerm.trim();
 
-                const finalEventsList: adadaptedApiTypes.models.ReportedInterceptEvent[] = [];
+                const finalEventsList: ReportedInterceptEvent[] = [];
                 const currentTs = this.getCurrentUnixTimestamp();
 
                 // Search for matching terms.
@@ -431,9 +668,7 @@ namespace AdadaptedJsSdk {
                             search_id: this.keywordIntercepts.search_id,
                             user_input: this.keywordInterceptSearchValue,
                             term: termObj.term,
-                            event_type:
-                                adadaptedApiTypes.models.ReportedEventType
-                                    .MATCHED,
+                            event_type: ReportedEventType.MATCHED,
                             created_at: currentTs,
                         });
                     }
@@ -455,9 +690,7 @@ namespace AdadaptedJsSdk {
                         search_id: "NA",
                         user_input: this.keywordInterceptSearchValue,
                         term: "NA",
-                        event_type:
-                            adadaptedApiTypes.models.ReportedEventType
-                                .NOT_MATCHED,
+                        event_type: ReportedEventType.NOT_MATCHED,
                         created_at: currentTs,
                     });
                 }
@@ -470,6 +703,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: finalEventsList,
                         },
                         this.deviceOs!,
@@ -511,6 +745,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: [
                                 {
                                     term_id: termObj.term_id,
@@ -518,9 +753,7 @@ namespace AdadaptedJsSdk {
                                     user_input: this
                                         .keywordInterceptSearchValue,
                                     term: termObj.term,
-                                    event_type:
-                                        adadaptedApiTypes.models
-                                            .ReportedEventType.SELECTED,
+                                    event_type: ReportedEventType.SELECTED,
                                     created_at: this.getCurrentUnixTimestamp(),
                                 },
                             ],
@@ -544,7 +777,7 @@ namespace AdadaptedJsSdk {
          * @param termIds - The term IDs list to trigger the event for.
          */
         public reportKeywordInterceptTermsPresented(termIds: string[]): void {
-            const termObjs: adadaptedApiTypes.models.KeywordSearchTerm[] = [];
+            const termObjs: KeywordSearchTerm[] = [];
 
             for (const termId of termIds) {
                 const termObj = this.getKeywordInterceptTerm(termId);
@@ -565,7 +798,7 @@ namespace AdadaptedJsSdk {
             ) {
                 console.error("Invalid or empty terms ID list provided.");
             } else {
-                const termEvents: adadaptedApiTypes.models.ReportedInterceptEvent[] = [];
+                const termEvents: ReportedInterceptEvent[] = [];
                 const currentTs = this.getCurrentUnixTimestamp();
 
                 for (const termObj of termObjs) {
@@ -574,9 +807,7 @@ namespace AdadaptedJsSdk {
                         search_id: this.keywordIntercepts.search_id,
                         user_input: this.keywordInterceptSearchValue,
                         term: termObj.term,
-                        event_type:
-                            adadaptedApiTypes.models.ReportedEventType
-                                .PRESENTED,
+                        event_type: ReportedEventType.PRESENTED,
                         created_at: currentTs,
                     });
                 }
@@ -587,6 +818,7 @@ namespace AdadaptedJsSdk {
                             app_id: this.appId,
                             udid: this.advertiserId,
                             session_id: this.sessionId,
+                            sdk_version: packageJson.version,
                             events: termEvents,
                         },
                         this.deviceOs!,
@@ -596,6 +828,156 @@ namespace AdadaptedJsSdk {
                         // Do nothing with the response for now...
                     });
             }
+        }
+
+        /**
+         * Client must trigger this method when any items
+         * are added to a list for reports we provide to the client.
+         * @param itemNames - The items to report.
+         * @param listName - The list to associate the items with, if any.
+         */
+        public reportItemsAddedToList(
+            itemNames: string[],
+            listName?: string
+        ): void {
+            const requestData = this.getListManagerApiRequestData(
+                ListManagerEventSource.APP,
+                ListManagerEventName.ADDED_TO_LIST,
+                itemNames,
+                listName
+            );
+
+            adadaptedApiRequests
+                .reportListManagerEvents(
+                    requestData,
+                    this.deviceOs!,
+                    this.listManagerApiEnv
+                )
+                .then()
+                .catch(() => {
+                    // Do nothing.
+                });
+        }
+
+        /**
+         * Client must trigger this method when any items
+         * are crossed off a list for reports we provide to the client.
+         * @param itemNames - The items to report.
+         * @param listName - The list the items are associated with, if any.
+         */
+        public reportItemsCrossedOffList(
+            itemNames: string[],
+            listName?: string
+        ): void {
+            const requestData = this.getListManagerApiRequestData(
+                ListManagerEventSource.APP,
+                ListManagerEventName.CROSSED_OFF_LIST,
+                itemNames,
+                listName
+            );
+
+            adadaptedApiRequests
+                .reportListManagerEvents(
+                    requestData,
+
+                    this.deviceOs!,
+                    this.listManagerApiEnv
+                )
+                .then()
+                .catch(() => {
+                    // Do nothing.
+                });
+        }
+
+        /**
+         * Client must trigger this method when any items
+         * are deleted from a list for reports we provide to the client.
+         * @param itemNames - The items to report.
+         * @param listName - The list the items are associated with, if any.
+         */
+        public reportItemsDeletedFromList(
+            itemNames: string[],
+            listName?: string
+        ): void {
+            const requestData = this.getListManagerApiRequestData(
+                ListManagerEventSource.APP,
+                ListManagerEventName.DELETED_FROM_LIST,
+                itemNames,
+                listName
+            );
+
+            adadaptedApiRequests
+                .reportListManagerEvents(
+                    requestData,
+                    this.deviceOs!,
+                    this.listManagerApiEnv
+                )
+                .then()
+                .catch(() => {
+                    // Do nothing.
+                });
+        }
+
+        /**
+         * Client must trigger this method when any items
+         * are deleted from a list for reports we provide to the client.
+         * @param payloadId - The payload ID that we want to acknowledge.
+         */
+        public markPayloadContentAcknowledged(payloadId: string): void {
+            adadaptedApiRequests
+                .reportPayloadContentStatus(
+                    {
+                        app_id: this.appId,
+                        session_id: this.sessionId!,
+                        udid: this.advertiserId,
+                        bundle_id: this.bundleId,
+                        bundle_version: this.bundleVersion,
+                        sdk_version: packageJson.version,
+                        tracking: [
+                            {
+                                payload_id: payloadId,
+                                status: PayloadStatus.DELIVERED,
+                                event_timestamp: this.getCurrentUnixTimestamp(),
+                            },
+                        ],
+                    },
+                    this.payloadApiEnv
+                )
+                .then()
+                .catch(() => {
+                    // Do nothing.
+                });
+        }
+
+        /**
+         * Client must trigger this method when any items
+         * are deleted from a list for reports we provide to the client.
+         * @param payloadId - The payload ID that we want to acknowledge.
+         */
+        public markPayloadContentRejected(payloadId: string): void {
+            adadaptedApiRequests
+                .reportPayloadContentStatus(
+                    {
+                        app_id: this.appId,
+                        session_id: this.sessionId!,
+                        udid: this.advertiserId,
+                        bundle_id: this.bundleId,
+                        bundle_version: this.bundleVersion,
+                        sdk_version: packageJson.version,
+                        tracking: [
+                            {
+                                payload_id: payloadId,
+                                status: PayloadStatus.REJECTED,
+                                event_timestamp: this.getCurrentUnixTimestamp(),
+                            },
+                        ],
+                    },
+                    this.payloadApiEnv
+                )
+                .then()
+                .catch(() => {
+                    // Do nothing.
+                });
         }
 
         /**
@@ -636,6 +1018,42 @@ namespace AdadaptedJsSdk {
          * The development API environment.
          */
         Dev = "https://sandbox.adadapted.com",
+        /**
+         * Used only for unit testing/mocking data.
+         */
+        Mock = "MOCK_DATA",
+    }
+
+    /**
+     * Enum defining the different API environments for List Manager.
+     */
+    export enum ListManagerApiEnv {
+        /**
+         * The production API environment.
+         */
+        Prod = "https://ec.adadapted.com",
+        /**
+         * The development API environment.
+         */
+        Dev = "https://sandec.adadapted.com",
+        /**
+         * Used only for unit testing/mocking data.
+         */
+        Mock = "MOCK_DATA",
+    }
+
+    /**
+     * Enum defining the different API environments for the Payload Server.
+     */
+    export enum PayloadApiEnv {
+        /**
+         * The production API environment.
+         */
+        Prod = "https://payload.adadapted.com",
+        /**
+         * The development API environment.
+         */
+        Dev = "https://sandpayload.adadapted.com",
         /**
          * Used only for unit testing/mocking data.
          */
