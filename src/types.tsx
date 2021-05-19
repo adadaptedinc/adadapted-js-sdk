@@ -1,5 +1,9 @@
 import * as React from "react";
-import { adadaptedApiTypes } from "./api/adadaptedApiTypes";
+import {
+    KeywordSearchTerm,
+    DetailedListItem,
+    OutOfAppDataPayload,
+} from "./api/adadaptedApiTypes";
 
 /**
  * A type that can be null or undefined.
@@ -114,6 +118,42 @@ export enum ApiEnv {
 }
 
 /**
+ * Enum defining the different API environments for List Manager.
+ */
+export enum ListManagerApiEnv {
+    /**
+     * The production API environment.
+     */
+    Prod = "https://ec.adadapted.com",
+    /**
+     * The development API environment.
+     */
+    Dev = "https://sandec.adadapted.com",
+    /**
+     * Used only for unit testing/mocking data.
+     */
+    Mock = "MOCK_DATA",
+}
+
+/**
+ * Enum defining the different API environments for the Payload Server.
+ */
+export enum PayloadApiEnv {
+    /**
+     * The production API environment.
+     */
+    Prod = "https://payload.adadapted.com",
+    /**
+     * The development API environment.
+     */
+    Dev = "https://sandpayload.adadapted.com",
+    /**
+     * Used only for unit testing/mocking data.
+     */
+    Mock = "MOCK_DATA",
+}
+
+/**
  * Interface defining inputs to the {@link Sdk.initialize} method.
  */
 export interface InitializeProps {
@@ -166,9 +206,13 @@ export interface InitializeProps {
      * Callback that gets triggered when an "add to list" item/items are clicked.
      * @param items - The array of items to "add to list".
      */
-    onAddToListTriggered?(
-        items: adadaptedApiTypes.models.DetailedListItem[]
-    ): void;
+    onAddToListTriggered?(items: DetailedListItem[]): void;
+    /**
+     * Callback that gets triggered when an "add to list"
+     * occurs by means of an "out of app" data payload.
+     * @param payloads - All payloads the client must go through.
+     */
+    onOutOfAppPayloadAvailable?(payloads: OutOfAppDataPayload[]): void;
 }
 
 /**
@@ -256,5 +300,4 @@ export interface AdZoneInfo {
  * {@link AdadaptedJsSdk} so the interaction with the SDK all be
  * done through this namespace.
  */
-export interface KeywordSearchResult
-    extends adadaptedApiTypes.models.KeywordSearchTerm {}
+export interface KeywordSearchResult extends KeywordSearchTerm {}
