@@ -25,7 +25,7 @@ import {
     ZonePlacements,
 } from "./types";
 import packageJson from "../package.json";
-import base64 from "react-native-base64";
+import base64 from "js-base64";
 
 /**
  * Class that acts as the AdAdapted SDK for JS.
