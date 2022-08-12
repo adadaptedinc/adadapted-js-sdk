@@ -1,0 +1,17 @@
+.cache-loader/
+example-react/
+node_modules/
+coverage/
+__mocks__/
+.idea
+.vscode
+.npmrc
+.eslintrc.json
+.gitlab-ci.yml
+.prettierignore
+.prettierrc.json
+jest.setup.ts
+tsconfig.json
+webpack.config.js
+adadapted-react-sdk-*.tgz
+.DS_Store

@@ -1,20 +1,15 @@
 import { nil } from "./types";
 import { NoInfer } from "type-zoo";
-
+declare global {
+    interface Window {
+        MSStream: string;
+    }
+}
 /**
  * Determine the mobile operating system.
  * @returns the operating system
  */
-export function getOperatingSystem(): string {
-    const userAgent = navigator.userAgent || navigator.vendor;
-
-    if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
-        return "ios";
-    } else {
-        return "android";
-    }
-}
-
+export declare function getOperatingSystem(): string;
 /**
  * Determines if the current device needs support for "safe area" padding.
  * The safe area padding is used to support devices that have a "notch" at the
@@ -29,34 +24,7 @@ export function getOperatingSystem(): string {
  *
  * @returns a boolean indicating whether or not "safe area" padding is needed.
  */
-export function needsSafeAreaPadding(): boolean {
-    // Wrapping with a "try", because checking if CSS is not undefined still
-    // fails when running unit tests or some reason.
-    try {
-        if (CSS.supports("padding-bottom: env(safe-area-inset-bottom)")) {
-            const div = document.createElement("div");
-
-            div.style.paddingBottom = "env(safe-area-inset-bottom)";
-            document.body.appendChild(div);
-
-            const calculatedPadding = parseInt(
-                window.getComputedStyle(div).paddingBottom,
-                10
-            );
-
-            document.body.removeChild(div);
-
-            if (calculatedPadding > 0) {
-                return true;
-            }
-        }
-    } catch (err) {
-        // Do nothing for now...
-    }
-
-    return false;
-}
-
+export declare function needsSafeAreaPadding(): boolean;
 /**
  * Generates a display friendly label based on a certain input format.
  * Example formats:
@@ -66,75 +34,38 @@ export function needsSafeAreaPadding(): boolean {
  * @param stringToReplace - The non-formatted string to be formatted.
  * @returns The formatted display friendly string.
  */
-export function generateDisplayFriendlyLabel(stringToReplace: string): string {
-    return stringToReplace
-        .replace(/-/g, " ")
-        .replace(/\|/g, " / ")
-        .replace(/\b\w/g, (l) => l.toUpperCase());
-}
-
+export declare function generateDisplayFriendlyLabel(
+    stringToReplace: string
+): string;
 /**
  * Validates that the provided string is or is not a hexadecimal color string.
  * @param stringToValidate - The string to validate.
  * @returns true if the string is a hexadecimal color and false if not.
  */
-export function isColorStringHex(
+export declare function isColorStringHex(
     stringToValidate: string | undefined
-): boolean {
-    if (!stringToValidate) {
-        return false;
-    }
-
-    return stringToValidate.match(/^(#[A-Fa-f0-9]{6}?)$/g) !== null;
-}
-
+): boolean;
 /**
  * Validates an email address.
  * @param emailAddress - The email address to validate.
  * @returns a boolean representing the validity of the email address.
  */
-export function isValidEmailAddress(emailAddress: string | undefined): boolean {
-    if (!emailAddress) {
-        return false;
-    }
-
-    const re =
-        /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-
-    return re.test(String(emailAddress).toLowerCase());
-}
-
+export declare function isValidEmailAddress(
+    emailAddress: string | undefined
+): boolean;
 /**
  * Counts the number of properties in a object.
  * @param obj - The object to count the number of properties from.
  * @returns the total count of properties from the provided object.
  */
-export function totalProperties<T>(obj: { [key: string]: T }): number {
-    let count = 0;
-
-    for (const property in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, property)) {
-            count++;
-        }
-    }
-
-    return count;
-}
-
+export declare function totalProperties<T>(obj: { [key: string]: T }): number;
 /**
  * Creates a Promise that resolves after a setTimeout delay.
  * @param milliseconds - Number of milliseconds to wait before the
  *      promise is resolved.
  * @returns A promise that is asynchronously resolved after the specified delay.
  */
-export function wait(milliseconds: number = 0): Promise<void> {
-    return new Promise((resolve) => {
-        window.setTimeout(() => {
-            resolve();
-        }, milliseconds);
-    });
-}
-
+export declare function wait(milliseconds?: number): Promise<void>;
 /**
  * Convenient utility for calling a function that may or may
  * not be undefined/null.
@@ -143,13 +74,13 @@ export function wait(milliseconds: number = 0): Promise<void> {
  * @returns The return value of the executed function, or undefined if
  *      the function is null/undefined
  */
-export function safeInvoke<R>(func: (() => R) | nil): R | undefined;
+export declare function safeInvoke<R>(func: (() => R) | nil): R | undefined;
 /**
  * See main definition above.
  * @param func - The function to call.
  * @param arg1 - Function argument.
  */
-export function safeInvoke<A1, R>(
+export declare function safeInvoke<A1, R>(
     func: ((arg1: A1) => R) | nil,
     arg1: NoInfer<A1>
 ): R | undefined;
@@ -159,7 +90,7 @@ export function safeInvoke<A1, R>(
  * @param arg1 - Function argument.
  * @param arg2 - Function argument.
  */
-export function safeInvoke<A1, A2, R>(
+export declare function safeInvoke<A1, A2, R>(
     func: ((arg1: A1, arg2: A2) => R) | nil,
     arg1: NoInfer<A1>,
     arg2: NoInfer<A2>
@@ -171,7 +102,7 @@ export function safeInvoke<A1, A2, R>(
  * @param arg2 - Function argument.
  * @param arg3 - Function argument.
  */
-export function safeInvoke<A1, A2, A3, R>(
+export declare function safeInvoke<A1, A2, A3, R>(
     func: ((arg1: A1, arg2: A2, arg3: A3) => R) | nil,
     arg1: NoInfer<A1>,
     arg2: NoInfer<A2>,
@@ -185,7 +116,7 @@ export function safeInvoke<A1, A2, A3, R>(
  * @param arg3 - Function argument.
  * @param arg4 - Function argument.
  */
-export function safeInvoke<A1, A2, A3, A4, R>(
+export declare function safeInvoke<A1, A2, A3, A4, R>(
     func: ((arg1: A1, arg2: A2, arg3: A3, arg4: A4) => R) | nil,
     arg1: NoInfer<A1>,
     arg2: NoInfer<A2>,
@@ -201,7 +132,7 @@ export function safeInvoke<A1, A2, A3, A4, R>(
  * @param arg4 - Function argument.
  * @param arg5 - Function argument.
  */
-export function safeInvoke<A1, A2, A3, A4, A5, R>(
+export declare function safeInvoke<A1, A2, A3, A4, A5, R>(
     func: ((arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5) => R) | nil,
     arg1: NoInfer<A1>,
     arg2: NoInfer<A2>,
@@ -219,7 +150,7 @@ export function safeInvoke<A1, A2, A3, A4, A5, R>(
  * @param arg5 - Function argument.
  * @param arg6 - Function argument.
  */
-export function safeInvoke<A1, A2, A3, A4, A5, A6, R>(
+export declare function safeInvoke<A1, A2, A3, A4, A5, A6, R>(
     func:
         | ((arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5, arg6: A6) => R)
         | nil,
@@ -230,15 +161,3 @@ export function safeInvoke<A1, A2, A3, A4, A5, A6, R>(
     arg5: NoInfer<A5>,
     arg6: NoInfer<A6>
 ): R | undefined;
-/**
- * See main definition above.
- * @param func - The function to call.
- * @param args - All arguments to call with the function.
- * @returns the method to be called if its defined.
- */
-// tslint:disable-next-line:ban-types
-export function safeInvoke(func: Function | nil, ...args: any[]): any {
-    if (func) {
-        return func(...args);
-    }
-}

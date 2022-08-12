@@ -4,11 +4,12 @@
  */
 import * as React from "react";
 import "./App.scss";
+import AdadaptedJsSdk from "@adadapted/js-sdk";
 
 // TODO: FIX THIS. Currently no Typescript definitions are being created due to
 //  the way we have to export the AdadaptedJsSdk with "module.exports" rather
 //  than just using "export" on the namespace.
-const AdadaptedJsSdk = require("../../node_modules/@adadapted/js-sdk/dist/adadapted-js-sdk.amd");
+// const AdadaptedJsSdk = require("../../node_modules/@adadapted/js-sdk/dist/adadapted-js-sdk.amd");
 
 /**
  * Props interface for {@link App}.
@@ -136,9 +137,7 @@ export class App extends React.Component<Props, State> {
         return (
             <div className="App">
                 <div className="color-picker-container">
-                    <div className="color-picker-label">
-                        Choose a color for the React logo:&nbsp;&nbsp;
-                    </div>
+                    <div className="color-picker-label">Choose a color for the React logo:&nbsp;&nbsp;</div>
                     <input
                         className="color-picker"
                         type="color"
@@ -188,9 +187,7 @@ export class App extends React.Component<Props, State> {
     private selectItem(selectedItem: SelectedItem): void {
         if (selectedItem.item) {
             // Report up the "selected" event to the AA SDK.
-            this.aaSdk.reportKeywordInterceptTermSelected(
-                selectedItem.item.term_id
-            );
+            this.aaSdk.reportKeywordInterceptTermSelected(selectedItem.item.term_id);
         }
 
         this.setState((prevState) => {

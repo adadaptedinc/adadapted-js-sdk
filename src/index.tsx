@@ -261,9 +261,8 @@ namespace AdadaptedJsSdk {
 
                 for (const adZone of this.adZones) {
                     const zonePlacementId = this.zonePlacements[adZone.zoneId];
-                    const containerElement = document.getElementById(
-                        zonePlacementId
-                    );
+                    const containerElement =
+                        document.getElementById(zonePlacementId);
 
                     if (zonePlacementId && containerElement) {
                         ReactDOM.render(adZone.adZone, containerElement);
@@ -729,8 +728,8 @@ namespace AdadaptedJsSdk {
                                 {
                                     term_id: termObj.term_id,
                                     search_id: this.keywordIntercepts.search_id,
-                                    user_input: this
-                                        .keywordInterceptSearchValue,
+                                    user_input:
+                                        this.keywordInterceptSearchValue,
                                     term: termObj.term,
                                     event_type: ReportedEventType.SELECTED,
                                     created_at: this.getCurrentUnixTimestamp(),
@@ -1039,5 +1038,8 @@ namespace AdadaptedJsSdk {
         Mock = "MOCK_DATA",
     }
 }
+
+// @ts-ignore
+window.AdadaptedJsSdk = AdadaptedJsSdk;
 
 module.exports = AdadaptedJsSdk;

@@ -1,0 +1,18 @@
+# cache-loader webpack plugin's cache dir
+.cache-loader/
+
+# Project build output
+dist/
+dist.zip
+
+# NPM modules
+node_modules/
+
+# Code Coverage
+coverage/
+
+# WebStorm Idea folder
+.idea
+
+# VSCode settings folder
+.vscode

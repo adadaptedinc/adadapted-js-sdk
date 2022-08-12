@@ -3,16 +3,17 @@
         "outDir": "./dist/",
         "sourceMap": true,
         "strict": true,
-        "module": "commonjs",
+        "module": "es6",
         "moduleResolution": "node",
         "allowJs": true,
-        "target": "es5",
+        "target": "es6",
         "jsx": "react",
-        "lib": ["DOM", "DOM.Iterable", "ES6", "ScriptHost"],
-        "allowSyntheticDefaultImports": false,
+        "lib": ["DOM", "DOM.Iterable", "ES6", "ES2021.String", "ScriptHost"],
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
         "forceConsistentCasingInFileNames": true,
         "skipLibCheck": true
     },
-    "include": ["./src/**/*", "./*"],
+    "include": ["./src/**/*", "./*", "type-definitions/constants.d.ts"],
     "exclude": []
 }

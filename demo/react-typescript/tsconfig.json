@@ -1,19 +1,19 @@
 {
     "compilerOptions": {
+        "outDir": "./dist/",
         "sourceMap": true,
         "strict": true,
-        "module": "commonjs",
+        "module": "es6",
         "moduleResolution": "node",
         "allowJs": true,
         "target": "es6",
         "jsx": "react",
-        "lib": ["es2017", "es7", "es6", "dom"],
-        "allowSyntheticDefaultImports": true,
-        "resolveJsonModule": true,
+        "lib": ["DOM", "DOM.Iterable", "ES6", "ES2021.String", "ScriptHost"],
         "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
         "forceConsistentCasingInFileNames": true,
         "skipLibCheck": true
     },
-    "include": ["./src/**/*", "./*"],
+    "include": ["react-typescript/src/**/*", "./*", "type-definitions/constants.d.ts"],
     "exclude": []
 }

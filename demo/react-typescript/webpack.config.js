@@ -6,7 +6,6 @@ const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const WebpackBundleAnalyzer = require("webpack-bundle-analyzer");
-const MomentTimezoneDataPlugin = require("moment-timezone-data-webpack-plugin");
 
 /**
  * Various file path constants.
@@ -43,14 +42,14 @@ const PATHS = {
 const DEV_SERVER = {
     compress: true,
     hot: true,
-    allowedHosts: ["127.0.0.1:8000", "localhost:8000"],
+    allowedHosts: ["127.0.0.1:8899", "localhost:8899"],
     open: ["dev/"],
     client: {
         overlay: true,
     },
-    port: 8000,
+    port: 8899,
     devMiddleware: {
-        publicPath: "http://127.0.0.1:8000/dev/",
+        publicPath: "http://127.0.0.1:8899/dev/",
     },
 };
 
@@ -192,15 +191,7 @@ module.exports = (env) => {
                 },
                 publicPath: "./",
                 template: `${PATHS.src}/index.ejs`,
-                title: "AdAdapted JS SDK Test",
-            }),
-            // Only keep the english locale for Moment.
-            // You can add more if needed with the following format: /en|it|ru/
-            new webpack.ContextReplacementPlugin(/moment[/\\]locale$/, /en/),
-            // Only keep the specific timezones for
-            // Moment-Timezone to keep the build size small.
-            new MomentTimezoneDataPlugin({
-                matchZones: /^America|^Canada/,
+                title: "AdAdapted: JS SDK",
             }),
             ...(!isServerBuild
                 ? [
