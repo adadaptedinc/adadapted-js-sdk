@@ -19,9 +19,16 @@ declare class AdadaptedJsSdk {
     refreshAdZonesTimer: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
+    cycleAdTimers: { [key: string]: any };
+    initialBodyOverflowStyle: string;
     onAdZonesRefreshed: () => void;
     onAddToListTriggered: () => void;
-    onOutOfAppPayloadAvailable: () => void;
+    onPayloadsAvailable: () => void;
+    /**
+     * Gets the current session ID.
+     * @returns the current session ID.
+     */
+    getSessionId(): any;
     /**
      * Initializes the session for the AdAdapted API and sets up the SDK.
      * @param props - The props used to initialize the SDK.
@@ -29,10 +36,12 @@ declare class AdadaptedJsSdk {
      */
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
     /**
-     * Gets the current session ID.
-     * @returns the current session ID.
+     * Requests all available Payload server item data for the user.
+     * 
+     * NOTE: If there are payload items available, the onPayloadsAvailable() callback 
+     * will be triggered and the items will be provided through that method.
      */
-    getSessionId(): any;
+    requestPayloadItemData(): void;
     /**
      * Creates all Ad Zone Info objects based on provided Ad Zones.
      * @param adZones - The object of available zones.
@@ -44,7 +53,7 @@ declare class AdadaptedJsSdk {
      * @param searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
      */
-    performKeywordSearch(searchTerm: any): void;
+    performKeywordSearch(searchTerm: any): AdadaptedJsSdk.KeywordSearchTerm[];
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
      * This will ensure that the event is properly recorded and enable accuracy in client reports.
@@ -151,11 +160,10 @@ declare namespace AdadaptedJsSdk {
          */
         onAddToListTriggered?(items: DetailedListItem[]): void;
         /**
-         * Callback that gets triggered when an "add to list"
-         * occurs by means of an "out of app" data payload.
+         * Callback that gets triggered when user "add to list" payloads have been retrieved.
          * @param payloads - All payloads the client must go through.
          */
-        onOutOfAppPayloadAvailable?(payloads: OutOfAppDataPayload[]): void;
+        onPayloadsAvailable?(payloads: Payload[]): void;
     }
 
     /**
@@ -272,6 +280,31 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
+     * The definition of a Keyword Search Term.
+     */
+    export interface KeywordSearchTerm {
+        /**
+         * The search term ID.
+         */
+        term_id: string;
+        /**
+         * The search term to validate a search string against.
+         */
+        term: string;
+        /**
+         * The display string a client can use to display in a list.
+         */
+        replacement: string;
+        /**
+         * The display priority of this item.
+         * Compare this to other {@link KeywordSearchTerm} items to determine
+         * the final priority order during display.
+         * The lower the number, the higher the priority.
+         */
+        priority: number;
+    }
+
+    /**
      * The definition of a Detailed List Item.
      */
     export interface DetailedListItem {
@@ -310,9 +343,9 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
-     * The definition of an "out of app" data payload.
+     * The definition of a data payload.
      */
-    export interface OutOfAppDataPayload {
+    export interface Payload {
         /**
          * The payload ID associated to the provided list items.
          */

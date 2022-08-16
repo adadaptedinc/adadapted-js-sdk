@@ -98,6 +98,7 @@ export class AdPopup extends React.Component<Props, State> {
         const iframe = document!.getElementById(
             "AdPopupIframe"
         )! as HTMLIFrameElement;
+
         iframe!.contentWindow!.AdAdapted = {
             addItemToList: function addItemToList(
                 payloadId: string,

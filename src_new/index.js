@@ -24,7 +24,7 @@ class AdadaptedJsSdk {
         this.keywordIntercepts = undefined;
         this.keywordInterceptSearchValue = "";
         this.cycleAdTimers = {};
-        this.adPopupsOpened = {};
+        this.initialBodyOverflowStyle = document.body.style.overflow;
 
         this.onAdZonesRefreshed = () => {
             // Defaulting to empty method.
@@ -32,9 +32,17 @@ class AdadaptedJsSdk {
         this.onAddToListTriggered = () => {
             // Defaulting to empty method.
         };
-        this.onOutOfAppPayloadAvailable = () => {
+        this.onPayloadsAvailable = () => {
             // Defaulting to empty method.
         };
+    }
+
+    /**
+     * Gets the current session ID.
+     * @returns the current session ID.
+     */
+    getSessionId() {
+        return this.sessionId;
     }
 
     /**
@@ -110,24 +118,39 @@ class AdadaptedJsSdk {
                     this.onAddToListTriggered = props.onAddToListTriggered;
                 }
 
-                // If the callback for onOutOfAppPayloadAvailable was provided, set it
+                // If the callback for onPayloadsAvailable was provided, set it
                 // globally for use when the method needs to be triggered.
-                if (props.onOutOfAppPayloadAvailable) {
-                    this.onOutOfAppPayloadAvailable =
-                        props.onOutOfAppPayloadAvailable;
+                if (props.onPayloadsAvailable) {
+                    this.onPayloadsAvailable = props.onPayloadsAvailable;
                 }
 
-                this.deviceOs = this.#DeviceOS.ANDROID; // TODO: this.#getOperatingSystem();
+                this.deviceOs = this.#getOperatingSystem();
 
                 // Initialize the session.
-                const xhr = new XMLHttpRequest();
-
-                /**
-                 * Method triggered upon request response.
-                 */
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        const response = JSON.parse(xhr.response);
+                this.#sendApiRequest({
+                    method: "POST",
+                    url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
+                    headers: [
+                        {
+                            name: "accept",
+                            value: "*/*",
+                        },
+                        {
+                            name: "Content-Type",
+                            value: "application/json",
+                        },
+                    ],
+                    requestPayload: {
+                        app_id: this.appId,
+                        udid: this.advertiserId,
+                        device_udid: this.advertiserId,
+                        sdk_version: packageJson.version,
+                        device_os: this.deviceOs,
+                        bundle_id: this.bundleId,
+                        bundle_version: this.bundleVersion,
+                        allow_retargeting: this.allowRetargeting,
+                    },
+                    onSuccess: (response) => {
                         this.sessionId = response.session_id;
                         this.sessionInfo = response;
 
@@ -144,51 +167,72 @@ class AdadaptedJsSdk {
 
                         // Make the initial call to the Payload data server to see if
                         // the user has any outstanding items to be added to list.
-                        this.#getPayloadItemData();
+                        this.requestPayloadItemData();
 
                         resolve();
-                    } else {
+                    },
+                    onError: () => {
                         reject("An error occurred initializing the SDK.");
-                    }
-                };
-
-                /**
-                 * Method triggered upon request error.
-                 */
-                xhr.onerror = () => {
-                    reject("An error occurred initializing the SDK.");
-                };
-
-                xhr.open(
-                    "POST",
-                    `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
-                    true
-                );
-                xhr.setRequestHeader("accept", "*/*");
-                xhr.setRequestHeader("Content-Type", "application/json");
-
-                xhr.send(
-                    JSON.stringify({
-                        app_id: this.appId,
-                        udid: this.advertiserId,
-                        device_udid: this.advertiserId,
-                        sdk_version: packageJson.version,
-                        device_os: this.deviceOs,
-                        bundle_id: this.bundleId,
-                        bundle_version: this.bundleVersion,
-                        allow_retargeting: this.allowRetargeting,
-                    })
-                );
+                    },
+                });
             }
         });
     }
 
     /**
-     * Gets the current session ID.
-     * @returns the current session ID.
+     * Requests all available Payload server item data for the user.
+     *
+     * NOTE: If there are payload items available, the onPayloadsAvailable() callback
+     * will be triggered and the items will be provided through that method.
      */
-    getSessionId() {
-        return this.sessionId;
+    requestPayloadItemData() {
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.payloadApiEnv}/v/1/pickup`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload: {
+                app_id: this.appId,
+                session_id: this.sessionId,
+                udid: this.advertiserId,
+            },
+            onSuccess: (response) => {
+                const finalItemList = [];
+
+                for (const payload of response.payloads) {
+                    const detailedItemList = [];
+
+                    for (const itemData of payload.detailed_list_items) {
+                        detailedItemList.push({
+                            product_title: itemData["product_title"],
+                            product_brand: itemData["product_brand"],
+                            product_category: itemData["product_category"],
+                            product_barcode: itemData["product_barcode"],
+                            product_discount: itemData["product_discount"],
+                            product_image: itemData["product_image"],
+                            product_sku: itemData["product_sku"],
+                        });
+                    }
+
+                    finalItemList.push({
+                        payload_id: payload.payload_id,
+                        detailed_list_items: detailedItemList,
+                    });
+                }
+
+                // Send the items to the client, so they can add them to the list.
+                this.onPayloadsAvailable(finalItemList);
+            },
+            onError: () => {
+                console.error(
+                    "An error occurred while requesting payload item data."
+                );
+            },
+        });
     }
 
     /**
@@ -196,7 +240,101 @@ class AdadaptedJsSdk {
      * @param searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
      */
-    performKeywordSearch(searchTerm) {}
+    performKeywordSearch(searchTerm) {
+        const finalResultListStartsWith = [];
+        const finalResultListContains = [];
+
+        this.keywordInterceptSearchValue = searchTerm;
+
+        if (!this.sessionId) {
+            console.error("AdAdapted JS SDK has not been initialized.");
+        } else if (!this.keywordIntercepts) {
+            console.error("No available keyword intercepts.");
+        } else if (
+            searchTerm &&
+            searchTerm.trim() &&
+            searchTerm.trim().length >= this.keywordIntercepts.min_match_length
+        ) {
+            searchTerm = searchTerm.trim();
+
+            const finalEventsList = [];
+            const currentTs = this.#getCurrentUnixTimestamp();
+
+            // Search for matching terms.
+            for (const termObj of this.keywordIntercepts.terms) {
+                if (
+                    termObj.term
+                        .toLowerCase()
+                        .startsWith(searchTerm.toLowerCase())
+                ) {
+                    // If the term starts with the search term,
+                    // add it to the finalResultListStartsWith list.
+                    finalResultListStartsWith.push(termObj);
+                    finalEventsList.push({
+                        term_id: termObj.term_id,
+                        search_id: this.keywordIntercepts.search_id,
+                        user_input: this.keywordInterceptSearchValue,
+                        term: termObj.term,
+                        event_type: this.#ReportedEventType.MATCHED,
+                        created_at: currentTs,
+                    });
+                }
+            }
+
+            // Sort the final results by priority.
+            finalResultListStartsWith.sort((a, b) =>
+                a.priority > b.priority ? 1 : -1
+            );
+            finalResultListContains.sort((a, b) =>
+                a.priority > b.priority ? 1 : -1
+            );
+
+            // If there are no events to report at this point,
+            // we need to report the "not_matched" event.
+            if (finalEventsList.length === 0) {
+                finalEventsList.push({
+                    term_id: "",
+                    search_id: "NA",
+                    user_input: this.keywordInterceptSearchValue,
+                    term: "NA",
+                    event_type: this.#ReportedEventType.NOT_MATCHED,
+                    created_at: currentTs,
+                });
+            }
+
+            // Send up the "matched" event for the keyword search for
+            // all terms that matched the users search.
+            this.#sendApiRequest({
+                method: "POST",
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                requestPayload: {
+                    app_id: this.appId,
+                    udid: this.advertiserId,
+                    session_id: this.sessionId,
+                    sdk_version: packageJson.version,
+                    events: finalEventsList,
+                },
+                onError: () => {
+                    console.error(
+                        "An error occurred while reporting the keyword intercept event."
+                    );
+                },
+            });
+        }
+
+        // The returned list will keep all terms found by matching the
+        // beginning of the term string at the beginning of the list. All
+        // terms found that didn't match the beginning of the string, but
+        // still contained the search term will be concatenated to the end
+        // of the list.
+        return finalResultListStartsWith.concat(finalResultListContains);
+    }
 
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
@@ -257,7 +395,48 @@ class AdadaptedJsSdk {
      * Triggered when session data is initialized or refreshed.
      * Creates a timer based on the session data refresh value.
      */
-    #onRefreshAdZones() {}
+    #onRefreshAdZones() {
+        // Get the amount of time we will wait until a refresh occurs.
+        // We are setting a minimum refresh time of 5 minutes, so if a
+        // value provided by the API is lower, we don't refresh too often.
+        const timerMs =
+            this.sessionInfo.polling_interval_ms >= 300000
+                ? this.sessionInfo.polling_interval_ms
+                : 300000;
+
+        this.refreshAdZonesTimer = setTimeout(() => {
+            this.#sendApiRequest({
+                method: "GET",
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                onSuccess: (response) => {
+                    this.sessionInfo = response;
+
+                    // Render the Ad Zones.
+                    this.#renderAdZones(response.zones);
+
+                    // Call the user defined callback indicating
+                    // the session data has been refreshed.
+                    this.onAdZonesRefreshed();
+
+                    // Start the timer again based on the new session data.
+                    this.#onRefreshAdZones();
+                },
+                onError: () => {
+                    console.error("An error occurred refreshing the ad zones.");
+
+                    // Start the timer again so we can make another
+                    // attempt to refresh the session data.
+                    this.#onRefreshAdZones();
+                },
+            });
+        }, timerMs);
+    }
 
     /**
      * Renders or updates the ad zone data.
@@ -317,23 +496,6 @@ class AdadaptedJsSdk {
                     zoneId: adZoneId,
                     adZone: adZoneContainer,
                     adZoneData: adZonesData[adZoneId],
-                    // adZone: (
-                    //     <AdZone
-                    //         key={adZoneId}
-                    //         appId={this.appId}
-                    //         sessionId={this.sessionId!}
-                    //         udid={this.advertiserId}
-                    //         deviceOs={this.deviceOs!}
-                    //         apiEnv={this.apiEnv}
-                    //         adZoneData={adZones[adZoneId]}
-                    //         onAddToListTriggered={(items) => {
-                    //             safeInvoke(
-                    //                 this.onAddToListTriggered,
-                    //                 items
-                    //             );
-                    //         }}
-                    //     />
-                    // ),
                 });
             }
         }
@@ -382,17 +544,159 @@ class AdadaptedJsSdk {
         adZoneContainer.appendChild(adZoneIFrame);
         adZoneContainer.appendChild(adZoneClickableArea);
 
-        console.log(adZoneContainer);
         return adZoneContainer;
+    }
+
+    /**
+     * Generates the ad popover.
+     * @param currentAd - The ad to display within the popover.
+     * @returns the generated ad popover.
+     */
+    #generateAdPopover(currentAd) {
+        const isSafeAreaPaddingRequired = this.#needsSafeAreaPadding();
+
+        let safeAreaHeaderPaddingTop = "0";
+        let safeAreaIframeMarginTop = "40px";
+        let safeAreaFooterPaddingBottom = "0";
+        let adPopupIframeHeight = "calc(100% - 100px)";
+
+        if (isSafeAreaPaddingRequired) {
+            safeAreaHeaderPaddingTop = "env(safe-area-inset-top)";
+            safeAreaIframeMarginTop = "calc(40px + env(safe-area-inset-top))";
+            adPopupIframeHeight =
+                "calc(100% - 100px - env(safe-area-inset-top) - env(safe-area-inset-bottom))";
+            safeAreaFooterPaddingBottom = "env(safe-area-inset-bottom)";
+        }
+
+        const adPopoverContainer = document.createElement("div");
+        adPopoverContainer.className = "AdPopup";
+        adPopoverContainer.id = "adContentsPopoverContainer";
+        adPopoverContainer.style.position = "fixed";
+        adPopoverContainer.style.width = "100%";
+        adPopoverContainer.style.height = "100%";
+        adPopoverContainer.style.top = "0";
+        adPopoverContainer.style.left = "0";
+        adPopoverContainer.style.backgroundColor = "#f0f0f0";
+        adPopoverContainer.style.zIndex = "999999997";
+
+        const adPopoverHeader = document.createElement("div");
+        adPopoverHeader.className = "AdPopup__header";
+        adPopoverHeader.style.display = "flex";
+        adPopoverHeader.style.flexDirection = "row";
+        adPopoverHeader.style.width = "100%";
+        adPopoverHeader.style.height = "39px";
+        adPopoverHeader.style.borderBottom = "1px solid #6c757d";
+        adPopoverHeader.style.textTransform = "none";
+        adPopoverHeader.style.overflow = "hidden";
+        adPopoverHeader.style.whiteSpace = "nowrap";
+        adPopoverHeader.style.position = "absolute";
+        adPopoverHeader.style.top = "0";
+        adPopoverHeader.style.left = "0";
+        adPopoverHeader.style.paddingTop = safeAreaHeaderPaddingTop;
+        adPopoverHeader.style.zIndex = "999999999";
+
+        const adPopoverHeaderTitle = document.createElement("div");
+        adPopoverHeaderTitle.className = "AdPopup__header-title";
+        adPopoverHeaderTitle.style.flex = "1 1 auto";
+        adPopoverHeaderTitle.style.fontSize = "16px";
+        adPopoverHeaderTitle.style.fontWeight = "bold";
+        adPopoverHeaderTitle.style.margin = "10px";
+        adPopoverHeaderTitle.style.color = "#333333";
+        adPopoverHeaderTitle.innerText = currentAd.popup.title_text;
+
+        const adPopoverHeaderLoadingIndicator = document.createElement("div");
+        adPopoverHeaderLoadingIndicator.className =
+            "AdPopup__header-loading-indicator";
+        adPopoverHeaderLoadingIndicator.style.flex = "0 0 auto";
+        adPopoverHeaderLoadingIndicator.style.marginLeft = "20px";
+        adPopoverHeaderLoadingIndicator.style.fontSize = "12px";
+        adPopoverHeaderLoadingIndicator.style.margin = "10px";
+        adPopoverHeaderLoadingIndicator.style.color = "#888888";
+        adPopoverHeaderLoadingIndicator.innerText = "Loading...";
+
+        const adPopoverIFrame = document.createElement("iframe");
+        adPopoverIFrame.className = "AdPopup__content";
+        adPopoverIFrame.id = "AdPopupIframe";
+        adPopoverIFrame.src = currentAd.action_path;
+        adPopoverIFrame.scrolling = "yes";
+        adPopoverIFrame.style.height = "0";
+        adPopoverIFrame.style.width = "0";
+        adPopoverIFrame.style.maxHeight = adPopupIframeHeight;
+        adPopoverIFrame.style.maxWidth = "100%";
+        adPopoverIFrame.style.minHeight = adPopupIframeHeight;
+        adPopoverIFrame.style.minWidth = "100%";
+        adPopoverIFrame.style.backgroundColor = "#ffffff";
+        adPopoverIFrame.style.border = "none";
+        adPopoverIFrame.style.marginTop = safeAreaIframeMarginTop;
+        adPopoverIFrame.style.zIndex = "999999998";
+        adPopoverIFrame.style.WebkitOverflowScrolling = "touch";
+        adPopoverIFrame.onload = () => {
+            // Remove the loading indicator.
+            const loadingIndicator = document.getElementsByClassName(
+                "AdPopup__header-loading-indicator"
+            )[0];
+            loadingIndicator.parentNode.removeChild(loadingIndicator);
+        };
+
+        const adPopoverFooter = document.createElement("div");
+        adPopoverFooter.className = "AdPopup__header";
+        adPopoverFooter.style.display = "flex";
+        adPopoverFooter.style.justifyContent = "center";
+        adPopoverFooter.style.alignItems = "center";
+        adPopoverFooter.style.width = "100%";
+        adPopoverFooter.style.height = "59px";
+        adPopoverFooter.style.borderTop = "1px solid #6c757d";
+        adPopoverFooter.style.backgroundColor = "#f0f0f0";
+        adPopoverFooter.style.position = "absolute";
+        adPopoverFooter.style.bottom = "0";
+        adPopoverFooter.style.left = "0";
+        adPopoverFooter.style.paddingBottom = safeAreaFooterPaddingBottom;
+        adPopoverFooter.style.zIndex = "999999999";
+
+        const adPopoverFooterCloseButton = document.createElement("div");
+        adPopoverFooterCloseButton.className = "close-button";
+        adPopoverFooterCloseButton.style.display = "flex";
+        adPopoverFooterCloseButton.style.justifyContent = "center";
+        adPopoverFooterCloseButton.style.alignItems = "center";
+        adPopoverFooterCloseButton.style.backgroundColor = "#6c757d";
+        adPopoverFooterCloseButton.style.height = "48px";
+        adPopoverFooterCloseButton.style.cursor = "pointer";
+        adPopoverFooterCloseButton.style.borderRadius = "4px";
+        adPopoverFooterCloseButton.style.margin = "5px";
+        adPopoverFooterCloseButton.onclick = () => {
+            const popoverContainer = document.getElementById(
+                "adContentsPopoverContainer"
+            );
+            popoverContainer.parentNode.removeChild(popoverContainer);
+
+            document.body.style.overflow = this.initialBodyOverflowStyle;
+        };
+
+        const adPopoverFooterCloseButtonLabel = document.createElement("div");
+        adPopoverFooterCloseButtonLabel.className = "button-label";
+        adPopoverFooterCloseButtonLabel.style.color = "#ffffff";
+        adPopoverFooterCloseButtonLabel.style.margin = "10px 80px";
+        adPopoverFooterCloseButtonLabel.style.fontSize = "14px";
+        adPopoverFooterCloseButtonLabel.innerText = "Close";
+
+        adPopoverHeader.appendChild(adPopoverHeaderTitle);
+        adPopoverHeader.appendChild(adPopoverHeaderLoadingIndicator);
+        adPopoverFooterCloseButton.appendChild(adPopoverFooterCloseButtonLabel);
+        adPopoverFooter.appendChild(adPopoverFooterCloseButton);
+        adPopoverContainer.appendChild(adPopoverHeader);
+        adPopoverContainer.appendChild(adPopoverIFrame);
+        adPopoverContainer.appendChild(adPopoverFooter);
+
+        return adPopoverContainer;
     }
 
     /**
      * Triggers when the user selects the ad zone.
      * @param adZoneData - The related ad zone data.
-     * @param adIndexShown - The index of the currently displayed ad within the ad zone.
+     * @param displayedAdIndex - The currently displayed ad index for the ad zone.
      */
-    #onAdZoneSelected(adZoneData, adIndexShown) {
-        const currentAd = adZoneData.ads[adIndexShown];
+    #onAdZoneSelected(adZoneData, displayedAdIndex) {
+        const currentAd = adZoneData.ads[displayedAdIndex];
 
         if (
             this.#getOperatingSystem() !== this.#DeviceOS.DESKTOP &&
@@ -401,10 +705,44 @@ class AdadaptedJsSdk {
                 currentAd.action_type === this.#AdActionType.EXTERNAL) &&
             currentAd.action_path
         ) {
-            // Only mobile.
-            this.adPopupsOpened[adZoneData.zoneId] = true;
+            // Mobile only.
+            document.body.append(this.#generateAdPopover(currentAd));
+            document.body.style.overflow = "hidden";
 
-            // TODO: Open the ad in a popover.
+            const adPopoverIFrameRef = document.getElementById("AdPopupIframe");
+
+            if (
+                adPopoverIFrameRef &&
+                adPopoverIFrameRef.contentWindow &&
+                adPopoverIFrameRef.contentWindow.AdAdapted
+            ) {
+                // This should replace the AdAdapted.addItemToList callback if it is available to set.
+                // NOTE: This is a port of what Brett added a while back and is for mobile only.
+                adPopoverIFrameRef.contentWindow.AdAdapted = {
+                    addItemToList: (
+                        payloadId,
+                        trackingId,
+                        productTitle,
+                        productBrand,
+                        productCategory,
+                        productBarcode,
+                        retailerSku,
+                        productDiscount,
+                        productImage
+                    ) => {
+                        triggerItemClicked({
+                            tracking_id: trackingId,
+                            product_title: productTitle,
+                            product_brand: productBrand,
+                            product_category: productCategory,
+                            product_barcode: productBarcode,
+                            product_sku: retailerSku,
+                            product_discount: productDiscount,
+                            product_image: productImage,
+                        });
+                    },
+                };
+            }
         } else if (
             this.#getOperatingSystem() === this.#DeviceOS.DESKTOP &&
             (currentAd.action_type === this.#AdActionType.POPUP ||
@@ -414,6 +752,12 @@ class AdadaptedJsSdk {
         ) {
             // Only desktop.
             window.open(currentAd.action_path, "_blank");
+
+            // NOTE: Circulars will not work in their current state for desktop. Circulars will need
+            // to be updated to send an event message up through the iframe and the ad popover will
+            // need to be displayed directly in the site displaying the ad. The other approach is to
+            // keep the related link for the ad loading in a new tab and to change the circulars to
+            // utilize the payload service to send the items to add to cart that way.
         } else if (
             currentAd.action_type === this.#AdActionType.CONTENT &&
             currentAd.payload &&
@@ -431,7 +775,7 @@ class AdadaptedJsSdk {
             clearTimeout(this.cycleAdTimers[adZoneData.id]);
         }
 
-        this.#cycleDisplayedAd(adZoneData);
+        this.#cycleDisplayedAd(adZoneData, displayedAdIndex);
     }
 
     /**
@@ -444,39 +788,16 @@ class AdadaptedJsSdk {
         const currentTs = Math.round(new Date().getTime() / 1000);
 
         // Log the taken action/event with the API.
-        const xhr = new XMLHttpRequest();
-
-        /**
-         * Method triggered upon request response.
-         */
-        xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                // Do nothing upon success.
-            } else {
-                console.error(
-                    `An error occurred reporting a user "${eventType}" event.`
-                );
-            }
-        };
-
-        /**
-         * Method triggered upon request error.
-         */
-        xhr.onerror = () => {
-            console.error(
-                `An error occurred reporting a user "${eventType}" event.`
-            );
-        };
-
-        xhr.open(
-            "POST",
-            `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/events`,
-            true
-        );
-        xhr.setRequestHeader("Content-Type", "application/json");
-
-        xhr.send(
-            JSON.stringify({
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/events`,
+            headers: [
+                {
+                    name: "Content-Type",
+                    value: "application/json",
+                },
+            ],
+            requestPayload: {
                 app_id: this.appId,
                 session_id: this.sessionId,
                 udid: this.advertiserId,
@@ -489,8 +810,13 @@ class AdadaptedJsSdk {
                         created_at: currentTs,
                     },
                 ],
-            })
-        );
+            },
+            onError: () => {
+                console.error(
+                    `An error occurred reporting a user "${eventType}" event.`
+                );
+            },
+        });
     }
 
     /**
@@ -498,14 +824,18 @@ class AdadaptedJsSdk {
      * @param adZoneData - The ad zone object.
      */
     #initializeAd(adZoneData) {
-        const adZoneDisplayedAdIndex = document
-            .getElementById(this.zonePlacements[adZoneData.id])
-            .getElementsByClassName("AdZone")[0]
-            .getAttribute("data-displayedAdIndex");
+        const adZoneDisplayedAdIndex = parseInt(
+            document
+                .getElementById(this.zonePlacements[adZoneData.id])
+                .getElementsByClassName("AdZone")[0]
+                .getAttribute("data-displayedAdIndex"),
+            10
+        );
 
         // Create the new timer based on the new ad index.
         this.#createAdTimer(
             adZoneData,
+            adZoneDisplayedAdIndex,
             adZoneData.ads[adZoneDisplayedAdIndex].refresh_time * 1000
         );
 
@@ -519,32 +849,33 @@ class AdadaptedJsSdk {
     /**
      * Generates a new timer for cycling to the next ad.
      * @param adZoneData - The ad zone object.
+     * @param displayedAdIndex - The currently displayed ad index for the ad zone.
      * @param timerLength - The length(in milliseconds) of the timer.
      */
-    #createAdTimer(adZoneData, timerLength) {
+    #createAdTimer(adZoneData, displayedAdIndex, timerLength) {
         this.cycleAdTimers[adZoneData.id] = setTimeout(() => {
-            this.#cycleDisplayedAd(adZoneData);
+            this.#cycleDisplayedAd(adZoneData, displayedAdIndex);
         }, timerLength);
-        console.log({ zoneId: adZoneData.id, timerLength: timerLength });
     }
 
     /**
      * Cycles to the next ad to display in the current available sequence of ads for an ad zone.
      * @param adZoneData - The ad zone object.
+     * @param displayedAdIndex - The currently displayed ad index for the ad zone.
      */
-    #cycleDisplayedAd(adZoneData) {
-        if (!this.adPopupsOpened[adZoneData.id]) {
-            const adZoneDisplayedAdIndex = parseInt(
-                document
-                    .getElementById(this.zonePlacements[adZoneData.id])
-                    .getElementsByClassName("AdZone")[0]
-                    .getAttribute("data-displayedAdIndex"),
-                10
-            );
+    #cycleDisplayedAd(adZoneData, displayedAdIndex) {
+        const adContentsPopoverContainer = document.getElementById(
+            "adContentsPopoverContainer"
+        );
+
+        if (!adContentsPopoverContainer) {
+            // An ad popover is not currently displayed, so cycle the ad zone ad.
+            // NOTE: This applies to all ad zones, so ads across all ad zones will
+            //       not cycle if a popover is currently consuming the screen.
             let nextAdIndex = 0;
 
-            if (adZoneDisplayedAdIndex < adZoneData.ads.length - 1) {
-                nextAdIndex = adZoneDisplayedAdIndex + 1;
+            if (displayedAdIndex < adZoneData.ads.length - 1) {
+                nextAdIndex = displayedAdIndex + 1;
             }
 
             this.#updateAdZoneContents(adZoneData, nextAdIndex);
@@ -556,7 +887,7 @@ class AdadaptedJsSdk {
             // maintain the current ad shown or the popup will cycle to the
             // next ad while the user is actively engaged with it. Then when
             // the user closes the popup, the ad will cycle to the next quickly.
-            this.#createAdTimer(adZoneData, 10000);
+            this.#createAdTimer(adZoneData, displayedAdIndex, 10000);
         }
     }
 
@@ -598,7 +929,26 @@ class AdadaptedJsSdk {
     /**
      * Trigger an API request to get all possible keyword intercepts for the session.
      */
-    #getKeywordIntercepts() {}
+    #getKeywordIntercepts() {
+        this.#sendApiRequest({
+            method: "GET",
+            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            onSuccess: (response) => {
+                this.keywordIntercepts = response;
+            },
+            onError: () => {
+                console.error(
+                    "An error occurred while retieving keyword intercepts."
+                );
+            },
+        });
+    }
 
     /**
      * Gets the Keyword Intercept Term based on the provided term ID.
@@ -611,7 +961,9 @@ class AdadaptedJsSdk {
      * Gets the current unix timestamp.
      * @returns the current unix timestamp.
      */
-    #getCurrentUnixTimestamp() {}
+    #getCurrentUnixTimestamp() {
+        return Math.round(new Date().getTime() / 1000);
+    }
 
     /**
      * Gets all data needed to make a List Manager API request.
@@ -636,30 +988,19 @@ class AdadaptedJsSdk {
     #handleDeepLink(event) {}
 
     /**
-     * Triggered when the state of the app changes.
-     * @param state - The current state of the app.
-     */
-    #handleAppStateChange(state) {}
-
-    /**
-     * Gets all available Payload server item data for the user.
-     */
-    #getPayloadItemData() {}
-
-    /**
      * Determine the mobile operating system.
      * @returns the operating system
      */
     #getOperatingSystem() {
         const userAgent = navigator.userAgent || navigator.vendor;
 
-        if (/iPad|iPhone|iPod/i.test(userAgent) && !window.MSStream) {
-            return this.#DeviceOS.IOS;
-        } else if (/android/i.test(userAgent)) {
-            return this.#DeviceOS.ANDROID;
-        } else {
-            return this.#DeviceOS.DESKTOP;
-        }
+        // if (/iPad|iPhone|iPod/i.test(userAgent) && !window.MSStream) {
+        //     return this.#DeviceOS.IOS;
+        // } else if (/android/i.test(userAgent)) {
+        return this.#DeviceOS.ANDROID;
+        // } else {
+        //     return this.#DeviceOS.DESKTOP;
+        // }
     }
 
     /**
@@ -677,6 +1018,98 @@ class AdadaptedJsSdk {
         }
 
         return count;
+    }
+
+    /**
+     * Determines if the current device needs support for "safe area" padding.
+     * The safe area padding is used to support devices that have a "notch" at the
+     * top of the screen and on-screen navigation buttons at the bottom of the
+     * screen.
+     *
+     * Note: There are four possible CSS properties for the safe area:
+     *      - safe-area-inset-top
+     *      - safe-area-inset-bottom
+     *      - safe-area-inset-left
+     *      - safe-area-inset-right
+     *
+     * @returns a boolean indicating whether or not "safe area" padding is needed.
+     */
+    #needsSafeAreaPadding() {
+        // Wrapping with a "try", because checking if CSS is not undefined still
+        // fails when running unit tests for some reason.
+        try {
+            if (CSS.supports("padding-bottom: env(safe-area-inset-bottom)")) {
+                const div = document.createElement("div");
+
+                div.style.paddingBottom = "env(safe-area-inset-bottom)";
+                document.body.appendChild(div);
+
+                const calculatedPadding = parseInt(
+                    window.getComputedStyle(div).paddingBottom,
+                    10
+                );
+
+                document.body.removeChild(div);
+
+                if (calculatedPadding > 0) {
+                    return true;
+                }
+            }
+        } catch (err) {
+            // Do nothing for now...
+        }
+
+        return false;
+    }
+
+    /**
+     * Handles sending an API request.
+     * @param {Object} settings - All settings to apply to the request.
+     * @param {String} settings.method - The request method to use (GET, POST, etc.)
+     * @param {String} settings.url - The URL to use for the request.
+     * @param {Array} settings.headers - Array of all request header objects.
+     * @param {Object} settings.requestPayload - All data to send on the body of the request.
+     * @param {Function} settings.onSuccess - The method that triggers upon successful result of the request.
+     * @param {Function} settings.onError - The method that triggers upon unsuccessful result of the request.
+     */
+    #sendApiRequest(settings) {
+        const xhr = new XMLHttpRequest();
+
+        /**
+         * Method triggered upon request response.
+         */
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                if (settings.onSuccess) {
+                    settings.onSuccess(JSON.parse(xhr.response));
+                }
+            } else {
+                if (settings.onError) {
+                    settings.onError();
+                }
+            }
+        };
+
+        /**
+         * Method triggered upon request error.
+         */
+        xhr.onerror = () => {
+            if (settings.onError) {
+                settings.onError();
+            }
+        };
+
+        xhr.open(settings.method, settings.url, true);
+
+        for (const header of settings.headers) {
+            xhr.setRequestHeader(header.name, header.value);
+        }
+
+        xhr.send(
+            settings.requestPayload
+                ? JSON.stringify(settings.requestPayload)
+                : undefined
+        );
     }
 
     /**
@@ -741,10 +1174,12 @@ class AdadaptedJsSdk {
          * The production API environment.
          */
         Prod: "https://payload.adadapted.com",
+        // Prod: "https://api.payloads.adadapted.com",
         /**
          * The development API environment.
          */
         Dev: "https://sandpayload.adadapted.com",
+        // Dev: "https://api.payloads.adadapted.dev",
         /**
          * Used only for unit testing/mocking data.
          */
