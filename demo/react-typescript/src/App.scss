@@ -1,90 +1,84 @@
+body {
+    margin: 0 !important;
+    font-family: "Catamaran", sans-serif !important;
+}
+
 .App {
     display: flex;
     flex-direction: column;
-    align-items: center;
 
-    .user-id-display {
+    .page-header {
         display: flex;
         flex-direction: row;
-        justify-content: center;
-        font-size: 18px;
-        font-weight: 800;
-        margin-bottom: 20px;
-        padding-bottom: 20px;
-        border-bottom: 1px solid grey;
-        width: 400px;
+        flex: 0 0 auto;
+        padding: 10px;
+        background-color: #383f80;
+        box-shadow: 0px 4px 6px -6px rgb(0 0 0 / 20%), 0px 0px 2px 0px rgb(0 0 0 / 14%),
+            0px 3px 10px 0px rgb(0 0 0 / 12%);
 
-        div:first-child {
-            margin-right: 8px;
+        .site-title {
+            display: flex;
+            align-items: center;
+            flex: 1 1 auto;
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 600;
             user-select: none;
         }
 
-        div:last-child {
-            margin-right: 8px;
-            color: blueviolet;
+        .cart-icon-container {
+            flex: 0 0 auto;
+
+            .cart-icon {
+                color: #ffffff;
+                width: 32px;
+                height: 32px;
+            }
+
+            .MuiBadge-badge {
+                background-color: #de4cf2;
+            }
         }
     }
 
-    .user-payload {
-        width: 400px;
-        margin-bottom: 20px;
-
-        div:first-child {
-            display: flex;
-            justify-content: center;
-            color: dodgerblue;
-            font-weight: 800;
-            font-size: 18px;
-            user-select: none;
-        }
-
-        div:last-child {
-            display: flex;
-            justify-content: center;
-        }
-    }
-
-    .loading-payloads-message,
-    .no-payloads-message {
-        margin-bottom: 20px;
-    }
-
-    .remove-user-payloads-button {
+    .page-body {
         display: flex;
-        justify-content: center;
-        padding-top: 20px;
-        padding-bottom: 20px;
-        border-top: 1px solid grey;
-        width: 400px;
+        flex-direction: row;
+        flex: 1 1 auto;
 
-        button {
-            background-color: darkorange;
+        .main-view {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            overflow: auto;
+            padding: 20px;
+
+            .keyword-intercept-search {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                flex: 0 0 auto;
+                width: 100%;
+
+                .item-search-input {
+                    max-width: 600px;
+                    width: 100%;
+                }
+
+                .keyword-search-results {
+                }
+            }
         }
-    }
 
-    .add-payload-buttons,
-    .record-payload-impression-buttons {
-        display: flex;
-        flex-direction: column;
-        padding-top: 20px;
-        border-top: 1px solid grey;
-        width: 400px;
+        .ad-units {
+            display: flex;
+            flex-direction: column;
+            flex: 0 0 auto;
+            padding: 20px;
 
-        button {
-            width: 100%;
-            margin-bottom: 20px;
-        }
-    }
-
-    .add-payload-buttons {
-        button {
-            background-color: limegreen;
-        }
-    }
-
-    .record-payload-impression-buttons {
-        button {
-            background-color: deeppink;
+            .ad-zone {
+                border: 1px solid #00000033;
+            }
         }
     }
 }

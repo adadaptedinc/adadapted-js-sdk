@@ -28,7 +28,7 @@ declare class AdadaptedJsSdk {
      * Gets the current session ID.
      * @returns the current session ID.
      */
-    getSessionId(): any;
+    getSessionId(): string;
     /**
      * Initializes the session for the AdAdapted API and sets up the SDK.
      * @param props - The props used to initialize the SDK.
@@ -47,55 +47,60 @@ declare class AdadaptedJsSdk {
      * @param adZones - The object of available zones.
      * @returns the array of Ad Zone Info objects.
      */
-    generateAdZones(adZones: any): void;
+    generateAdZones(adZones: {
+        [key: number]: AdadaptedJsSdk.Zone;
+    }): void;
     /**
      * Searches through available ad keywords based on provided search term.
      * @param searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
      */
-    performKeywordSearch(searchTerm: any): AdadaptedJsSdk.KeywordSearchTerm[];
+    performKeywordSearch(searchTerm: string): AdadaptedJsSdk.KeywordSearchTerm[];
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
      * This will ensure that the event is properly recorded and enable accuracy in client reports.
      * @param termId - The term ID to trigger the event for.
      */
-    reportKeywordInterceptTermSelected(termId: any): void;
+    reportKeywordInterceptTermSelected(termId: string): void;
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "presented" to the user.
      * All terms that satisfy a search don't have to be presented, so only provide term IDs for the
      * terms that ultimately get presented to the user.
      * NOTE: This will ensure that the event is properly recorded and enable accuracy in client reports.
-     * @param termIds - The term IDs list to trigger the event for.
+     * @param termIds - The keyword intercept term IDs list to trigger the event for.
      */
-    reportKeywordInterceptTermsPresented(termIds: any): void;
+    reportKeywordInterceptTermsPresented(termIds: string[]): void;
     /**
      * Client must trigger this method when any items are added to a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list to associate the items with, if available.
      */
-    reportItemsAddedToList(itemNames: any, listName: any): void;
+    reportItemsAddedToList(itemNames: string[], listName: string): void;
     /**
      * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsCrossedOffList(itemNames: any, listName: any): void;
+    reportItemsCrossedOffList(itemNames: string[], listName: string): void;
     /**
      * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsDeletedFromList(itemNames: any, listName: any): void;
+    reportItemsDeletedFromList(itemNames: string[], listName: string): void;
     /**
-     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * Client must trigger this method after processing a payload into a user's list.
+     * Enables reporting we provided to the client.
      * @param payloadId - The payload ID that we want to acknowledge.
      */
-    markPayloadContentAcknowledged(payloadId: any): void;
+    markPayloadContentAcknowledged(payloadId: string): void;
     /**
-     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * Client must trigger this method when any payload items were rejected from being
+     * added to a user's list. Enables reporting we provided to the client.
+     * Example Usage: The item already exists in the users list.
      * @param payloadId - The payload ID that we want to acknowledge.
      */
-    markPayloadContentRejected(payloadId: any): void;
+    markPayloadContentRejected(payloadId: string): void;
     /**
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
@@ -374,5 +379,168 @@ declare namespace AdadaptedJsSdk {
          * The array of list items.
          */
         detailed_list_items: DetailedListItem[];
+    }
+
+    /**
+     * The definition of a zone.
+     */
+    export interface Zone {
+        /**
+         * The zone ID.
+         */
+        id: string;
+        /**
+         * ?
+         */
+        land_height: number;
+        /**
+         * ?
+         */
+        land_width: number;
+        /**
+         * ?
+         */
+        port_height: number;
+        /**
+         * ?
+         */
+        port_width: number;
+        /**
+         * The available ads.
+         */
+        ads: Ad[];
+    }
+
+    /**
+     * The definition of an Ad.
+     */
+    export interface Ad {
+        /**
+         * The ad ID.
+         */
+        ad_id: string;
+        /**
+         * The impression ID.
+         */
+        impression_id: string;
+        /**
+         * The type of ad this is.
+         */
+        type: string;
+        /**
+         * How often the ad refreshes? Swaps out for another?
+         * Length of time in seconds.
+         */
+        refresh_time: number;
+        /**
+         * The URL for the ad image to display.
+         */
+        creative_url: string;
+        /**
+         * The tracking pixel to include in the zone view for this ad?
+         */
+        tracking_html: string;
+        /**
+         * ?
+         */
+        action_path: string;
+        /**
+         * ?
+         */
+        action_type: AdActionType;
+        /**
+         * If true, the ad will be hidden after interaction.
+         */
+        hide_after_interaction: boolean;
+        /**
+         * ?
+         */
+        payload: AdPayload;
+        /**
+         * ?
+         */
+        popup: AdPopup;
+    }
+
+    /**
+     * The definition of an Ad Popup.
+     */
+    export interface AdPopup {
+        /**
+         * ?
+         */
+        alt_close_btn: string;
+        /**
+         * ?
+         */
+        background_color: string;
+        /**
+         * ?
+         */
+        hide_banner: boolean;
+        /**
+         * ?
+         */
+        hide_browser_nav: boolean;
+        /**
+         * ?
+         */
+        hide_close_btn: boolean;
+        /**
+         * ?
+         */
+        text_color: string;
+        /**
+         * ?
+         */
+        title_text: string;
+        /**
+         * ?
+         */
+        type: string;
+    }
+
+    /**
+     * The definition of an Ad Payload.
+     */
+    export interface AdPayload {
+        /**
+         * ?
+         */
+        detailed_list_items: DetailedListItem[];
+    }
+
+    /**
+     * Enum defining the available ad action types.
+     */
+    export enum AdActionType {
+        /**
+         * Used for Add To List.
+         */
+        CONTENT = "c",
+        /**
+         * Used for opening URLs in an external browser.
+         */
+        EXTERNAL = "e",
+        /**
+         * Used for opening URLs in a web view within the app.
+         * Works the same as {@link AdActionType.POPUP}.
+         * NOTE: This one should probably be deprecated with the new
+         *       platform redesign, since its not as obvious what it does.
+         */
+        LINK = "l",
+        /**
+         * Used for opening URLs in a web view within the app.
+         * Works the same as {@link AdActionType.LINK}.
+         */
+        POPUP = "p",
+        /**
+         * Used for opening app store URLs in the app store.
+         */
+        APP = "a",
+        /**
+         * ?
+         */
+        NONE = "n",
     }
 }

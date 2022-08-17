@@ -322,7 +322,9 @@ class AdadaptedJsSdk {
                 },
                 onError: () => {
                     console.error(
-                        "An error occurred while reporting the keyword intercept event."
+                        `An error occurred while reporting the keyword intercept "${
+                            this.#ReportedEventType.MATCHED
+                        }" or "${this.#ReportedEventType.NOT_MATCHED}" event.`
                     );
                 },
             });
@@ -337,50 +339,231 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
-     * This will ensure that the event is properly recorded and enable accuracy in client reports.
-     * @param termId - The term ID to trigger the event for.
-     */
-    reportKeywordInterceptTermSelected(termId) {}
-
-    /**
      * Client must trigger this method when a Keyword Intercept Term has been "presented" to the user.
      * All terms that satisfy a search don't have to be presented, so only provide term IDs for the
      * terms that ultimately get presented to the user.
      * NOTE: This will ensure that the event is properly recorded and enable accuracy in client reports.
-     * @param termIds - The term IDs list to trigger the event for.
+     * @param termIds - The keyword intercept term IDs list to trigger the event for.
      */
-    reportKeywordInterceptTermsPresented(termIds) {}
+    reportKeywordInterceptTermsPresented(termIds) {
+        const termObjs = [];
+
+        for (const termId of termIds) {
+            const termObj = this.#getKeywordInterceptTerm(termId);
+
+            if (termObj) {
+                termObjs.push(termObj);
+            }
+        }
+
+        if (!this.sessionId) {
+            console.error("AdAdapted JS SDK has not been initialized.");
+        } else if (!this.keywordIntercepts) {
+            console.error("No available keyword intercepts.");
+        } else if (!termIds || termIds.length === 0 || termObjs.length === 0) {
+            console.error(
+                "Invalid or empty keyword intercept list of term IDs provided."
+            );
+        } else {
+            const termEvents = [];
+            const currentTs = this.#getCurrentUnixTimestamp();
+
+            for (const termObj of termObjs) {
+                termEvents.push({
+                    term_id: termObj.term_id,
+                    search_id: this.keywordIntercepts.search_id,
+                    user_input: this.keywordInterceptSearchValue,
+                    term: termObj.term,
+                    event_type: this.#ReportedEventType.PRESENTED,
+                    created_at: currentTs,
+                });
+            }
+
+            this.#sendApiRequest({
+                method: "POST",
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                requestPayload: {
+                    app_id: this.appId,
+                    udid: this.advertiserId,
+                    session_id: this.sessionId,
+                    sdk_version: packageJson.version,
+                    events: termEvents,
+                },
+                onError: () => {
+                    console.error(
+                        `An error occurred while reporting the keyword intercept "${
+                            this.#ReportedEventType.PRESENTED
+                        }" event.`
+                    );
+                },
+            });
+        }
+    }
+
+    /**
+     * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
+     * This will ensure that the event is properly recorded and enable accuracy in client reports.
+     * @param termId - The term ID to trigger the event for.
+     */
+    reportKeywordInterceptTermSelected(termId) {
+        const termObj = this.#getKeywordInterceptTerm(termId);
+
+        if (!this.sessionId) {
+            console.error("AdAdapted JS SDK has not been initialized.");
+        } else if (!this.keywordIntercepts) {
+            console.error("No available keyword intercepts.");
+        } else if (!termId || !termObj) {
+            console.error("Invalid keyword intercept term ID provided.");
+        } else {
+            this.#sendApiRequest({
+                method: "POST",
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                requestPayload: {
+                    app_id: this.appId,
+                    udid: this.advertiserId,
+                    session_id: this.sessionId,
+                    sdk_version: packageJson.version,
+                    events: [
+                        {
+                            term_id: termObj.term_id,
+                            search_id: this.keywordIntercepts.search_id,
+                            user_input: this.keywordInterceptSearchValue,
+                            term: termObj.term,
+                            event_type: this.#ReportedEventType.SELECTED,
+                            created_at: this.#getCurrentUnixTimestamp(),
+                        },
+                    ],
+                },
+                onError: () => {
+                    console.error(
+                        `An error occurred while reporting the keyword intercept "${
+                            this.#ReportedEventType.SELECTED
+                        }" event.`
+                    );
+                },
+            });
+        }
+    }
 
     /**
      * Client must trigger this method when any items are added to a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list to associate the items with, if available.
      */
-    reportItemsAddedToList(itemNames, listName) {}
+    reportItemsAddedToList(itemNames, listName) {
+        const requestPayload = this.#getListManagerApiRequestData(
+            this.#ListManagerEventName.ADDED_TO_LIST,
+            itemNames,
+            listName
+        );
+
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.apiEnv}/v/1/${this.deviceOs}/events`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload,
+            onError: () => {
+                console.error(
+                    `An error occurred while reporting an item "${
+                        this.#ListManagerEventName.ADDED_TO_LIST
+                    }" event.`
+                );
+            },
+        });
+    }
 
     /**
      * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsCrossedOffList(itemNames, listName) {}
+    reportItemsCrossedOffList(itemNames, listName) {
+        const requestPayload = this.#getListManagerApiRequestData(
+            ListManagerEventName.CROSSED_OFF_LIST,
+            itemNames,
+            listName
+        );
+
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.apiEnv}/v/1/${this.deviceOs}/events`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload,
+            onError: () => {
+                console.error(
+                    `An error occurred while reporting an item "${
+                        this.#ListManagerEventName.CROSSED_OFF_LIST
+                    }" event.`
+                );
+            },
+        });
+    }
 
     /**
      * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsDeletedFromList(itemNames, listName) {}
+    reportItemsDeletedFromList(itemNames, listName) {
+        const requestPayload = this.#getListManagerApiRequestData(
+            ListManagerEventName.DELETED_FROM_LIST,
+            itemNames,
+            listName
+        );
+
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.apiEnv}/v/1/${this.deviceOs}/events`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload,
+            onError: () => {
+                console.error(
+                    `An error occurred while reporting an item "${
+                        this.#ListManagerEventName.DELETED_FROM_LIST
+                    }" event.`
+                );
+            },
+        });
+    }
 
     /**
-     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * Client must trigger this method after processing a payload into a user's list.
+     * Enables reporting we provided to the client.
      * @param payloadId - The payload ID that we want to acknowledge.
      */
     markPayloadContentAcknowledged(payloadId) {}
 
     /**
-     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * Client must trigger this method when any payload items were rejected from being
+     * added to a user's list. Enables reporting we provided to the client.
+     * Example Usage: The item already exists in the users list.
      * @param payloadId - The payload ID that we want to acknowledge.
      */
     markPayloadContentRejected(payloadId) {}
@@ -389,7 +572,11 @@ class AdadaptedJsSdk {
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
      */
-    unmount() {}
+    unmount() {
+        if (this.refreshAdZonesTimer) {
+            clearTimeout(this.refreshAdZonesTimer);
+        }
+    }
 
     /**
      * Triggered when session data is initialized or refreshed.
@@ -955,7 +1142,19 @@ class AdadaptedJsSdk {
      * @param termId - The term ID to get the term object for.
      * @returns the term if it was found based on the provided term ID.
      */
-    #getKeywordInterceptTerm(termId) {}
+    #getKeywordInterceptTerm(termId) {
+        let term;
+
+        if (this.keywordIntercepts && termId) {
+            for (const termObj of this.keywordIntercepts.terms) {
+                if (termObj.term_id === termId) {
+                    term = termObj;
+                }
+            }
+        }
+
+        return term;
+    }
 
     /**
      * Gets the current unix timestamp.
@@ -967,18 +1166,39 @@ class AdadaptedJsSdk {
 
     /**
      * Gets all data needed to make a List Manager API request.
-     * @param eventSource - The event source.
      * @param eventName - The event name.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list associated to the items, if available.
      * @returns the data required for the request.
      */
-    #getListManagerApiRequestData(
-        eventSource,
-        eventName,
-        itemNames,
-        listName
-    ) {}
+    #getListManagerApiRequestData(eventName, itemNames, listName) {
+        const eventList = [];
+
+        for (const itemName of itemNames) {
+            eventList.push({
+                event_source:
+                    this.deviceOs === this.#DeviceOS.DESKTOP
+                        ? this.#ListManagerEventSource.DESKTOP
+                        : this.#ListManagerEventSource.APP,
+                event_name: eventName,
+                event_timestamp: this.#getCurrentUnixTimestamp(),
+                event_params: {
+                    item_name: itemName,
+                    list_name: listName,
+                },
+            });
+        }
+
+        return {
+            session_id: this.sessionId,
+            app_id: this.appId,
+            udid: this.advertiserId,
+            events: eventList,
+            sdk_version: packageJson.version,
+            bundle_id: this.bundleId,
+            bundle_version: this.bundleVersion,
+        };
+    }
 
     /**
      * Takes the deep link URL and extracts out the payload items
@@ -1249,6 +1469,38 @@ class AdadaptedJsSdk {
          * Occurs when the user has selected a keyword intercept term.
          */
         SELECTED: "selected",
+    };
+
+    /**
+     * Enum defining the possible values for a List Manager Event Source.
+     */
+    #ListManagerEventSource = {
+        /**
+         * The event was triggered from the app.
+         */
+        APP: "app",
+        /**
+         * The event was triggered from desktop.
+         */
+        DESKTOP: "desktop",
+    };
+
+    /**
+     * Enum defining the possible values for a List Manager Event Name.
+     */
+    #ListManagerEventName = {
+        /**
+         * The user added an item to their list.
+         */
+        ADDED_TO_LIST: "user_added_to_list",
+        /**
+         * The user crossed off an item from their list.
+         */
+        CROSSED_OFF_LIST: "user_crossed_off_list",
+        /**
+         * The user deleted an item from their list.
+         */
+        DELETED_FROM_LIST: "user_deleted_from_list",
     };
 }
 
