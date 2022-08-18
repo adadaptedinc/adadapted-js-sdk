@@ -471,7 +471,7 @@ class AdadaptedJsSdk {
 
         this.#sendApiRequest({
             method: "POST",
-            url: `${this.apiEnv}/v/1/${this.deviceOs}/events`,
+            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
             headers: [
                 {
                     name: "accept",
@@ -496,14 +496,14 @@ class AdadaptedJsSdk {
      */
     reportItemsCrossedOffList(itemNames, listName) {
         const requestPayload = this.#getListManagerApiRequestData(
-            ListManagerEventName.CROSSED_OFF_LIST,
+            this.#ListManagerEventName.CROSSED_OFF_LIST,
             itemNames,
             listName
         );
 
         this.#sendApiRequest({
             method: "POST",
-            url: `${this.apiEnv}/v/1/${this.deviceOs}/events`,
+            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
             headers: [
                 {
                     name: "accept",
@@ -528,14 +528,14 @@ class AdadaptedJsSdk {
      */
     reportItemsDeletedFromList(itemNames, listName) {
         const requestPayload = this.#getListManagerApiRequestData(
-            ListManagerEventName.DELETED_FROM_LIST,
+            this.#ListManagerEventName.DELETED_FROM_LIST,
             itemNames,
             listName
         );
 
         this.#sendApiRequest({
             method: "POST",
-            url: `${this.apiEnv}/v/1/${this.deviceOs}/events`,
+            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
             headers: [
                 {
                     name: "accept",
@@ -1313,7 +1313,8 @@ class AdadaptedJsSdk {
         /**
          * Method triggered upon request error.
          */
-        xhr.onerror = () => {
+        xhr.onerror = (err) => {
+            console.log(err);
             if (settings.onError) {
                 settings.onError();
             }

@@ -6,7 +6,12 @@ import React, { FC, ReactElement, useState, useEffect } from "react";
 import "./App.scss";
 import AdadaptedJsSdk from "@adadapted/js-sdk/src_new";
 import TextField from "@mui/material/TextField";
-import { ShoppingCartOutlined } from "@mui/icons-material";
+import {
+    ShoppingCartOutlined,
+    RemoveCircleOutline,
+    CheckCircleOutline,
+    DeleteSweepOutlined,
+} from "@mui/icons-material";
 import { Badge, Button, Drawer, IconButton } from "@mui/material";
 
 /**
@@ -25,6 +30,10 @@ interface Item {
      * The quantity of the item in the cart.
      */
     quantity: number;
+    /**
+     * If true, the item is crossed off the list.
+     */
+    isCrossedOff?: boolean;
 }
 
 /**
@@ -185,11 +194,144 @@ export const App: FC = (): ReactElement => {
         return itemCount;
     };
 
+    /**
+     * Handles crossing an item off the user's shopping list.
+     * @param idx - The index of the item in the list.
+     */
+    const crossItemOffList = (idx: number) => {
+        jsSdk.reportItemsCrossedOffList([userListItems[idx].name], "Shopping List");
+
+        setUserListItems((prevUserListItems) => {
+            const updatedUserListItems = [...prevUserListItems];
+
+            updatedUserListItems[idx].isCrossedOff = true;
+
+            return updatedUserListItems;
+        });
+    };
+
+    /**
+     * Handles removing an item from the user's shopping list.
+     * @param idx - The index of the item in the list.
+     */
+    const removeItemFromList = (idx: number) => {
+        jsSdk.reportItemsDeletedFromList([userListItems[idx].name], "Shopping List");
+
+        setUserListItems((prevUserListItems) => {
+            let updatedUserListItems = [...prevUserListItems];
+
+            updatedUserListItems.splice(idx, 1);
+
+            return updatedUserListItems;
+        });
+    };
+
+    /**
+     * Handles removing all items from the user's shopping list.
+     */
+    const removeAllItemsFromList = () => {
+        const itemNames: string[] = [];
+
+        for (const listItem of userListItems) {
+            itemNames.push(listItem.name);
+        }
+
+        jsSdk.reportItemsDeletedFromList(itemNames, "Shopping List");
+
+        setUserListItems([]);
+    };
+
+    /**
+     * Handles removing an item from the user's cart.
+     * @param idx - The index of the item in the cart.
+     */
+    const removeItemFromCart = (idx: number) => {
+        jsSdk.reportItemsDeletedFromList([userCartItems[idx].name], "Cart");
+
+        setUserCartItems((prevUserCartItems) => {
+            let updatedUserCartItems = [...prevUserCartItems];
+
+            updatedUserCartItems.splice(idx, 1);
+
+            return updatedUserCartItems;
+        });
+    };
+
+    /**
+     * Handles removing all items from the user's cart.
+     */
+    const removeAllItemsFromCart = () => {
+        const itemNames: string[] = [];
+
+        for (const cartItem of userCartItems) {
+            itemNames.push(cartItem.name);
+        }
+
+        jsSdk.reportItemsDeletedFromList(itemNames, "Cart");
+
+        setUserCartItems([]);
+    };
+
     // Returned JSX.
     return (
         <div className="App">
             <div className="page-header">
-                <div className="site-title">AdAdapted JS Test App</div>
+                <div className="site-title-container">
+                    <div className="aa-logo">
+                        <svg viewBox="0 0 122 153" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect
+                                y="139.752"
+                                width="110.774"
+                                height="26.3061"
+                                transform="rotate(-61.58 0 139.752)"
+                                fill="#9DD0EC"
+                            />
+                            <rect
+                                x="69.2412"
+                                y="42.4009"
+                                width="110.691"
+                                height="26.3061"
+                                transform="rotate(61.5811 69.2412 42.4009)"
+                                fill="#9DD0EC"
+                            />
+                            <path d="M60.96 27L72.6513 48.75H49.2686L60.96 27Z" fill="#9DD0EC" />
+                            <rect
+                                y="112.752"
+                                width="110.774"
+                                height="26.3061"
+                                transform="rotate(-61.58 0 112.752)"
+                                fill="#9DD0EC"
+                            />
+                            <rect
+                                x="69.2412"
+                                y="15.4008"
+                                width="110.691"
+                                height="26.3061"
+                                transform="rotate(61.5811 69.2412 15.4008)"
+                                fill="#9DD0EC"
+                            />
+                            <path d="M60.96 0L72.6513 21.75H49.2686L60.96 0Z" fill="#9DD0EC" />
+                            <rect
+                                x="72.5605"
+                                y="48.5435"
+                                width="79.9689"
+                                height="13.4582"
+                                transform="rotate(61.5811 72.5605 48.5435)"
+                                fill="#177DB4"
+                            />
+                            <rect
+                                x="11.2998"
+                                y="118.87"
+                                width="79.5821"
+                                height="13.4582"
+                                transform="rotate(-61.58 11.2998 118.87)"
+                                fill="#177DB4"
+                            />
+                            <path d="M60.9447 26.04L76.0785 55.2525H45.8109L60.9447 26.04Z" fill="#177DB4" />
+                        </svg>
+                    </div>
+                    <div className="site-title-text">Javascript SDK Test App</div>
+                </div>
                 <div className="cart-icon-container">
                     <IconButton
                         onClick={() => {
@@ -203,7 +345,7 @@ export const App: FC = (): ReactElement => {
                 </div>
             </div>
             <div className="page-body">
-                <div className="main-view">
+                <div className="search-view">
                     <div className="keyword-intercept-search">
                         <TextField
                             className="item-search-input"
@@ -214,17 +356,18 @@ export const App: FC = (): ReactElement => {
 
                                 keywordSearchTimer = setTimeout(() => {
                                     setKeywordSearchResults(jsSdk.performKeywordSearch(event.target.value));
-                                }, 1000);
+                                }, 300);
                             }}
                         />
                         <div className="keyword-search-results">
                             {keywordSearchResults.map((keywordResult, idx) => {
                                 return (
-                                    <div key={`keyword-search-result-${idx}`}>
+                                    <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
                                         <div className="item-name">{keywordResult.replacement}</div>
                                         <div className="item-options">
                                             <Button
                                                 className="add-to-cart-button"
+                                                variant="contained"
                                                 onClick={() => {
                                                     setUserCartItems((prevUserCartItems) => {
                                                         const finalCartItems: Item[] = [];
@@ -252,6 +395,10 @@ export const App: FC = (): ReactElement => {
                                                         }
 
                                                         jsSdk.reportKeywordInterceptTermSelected(keywordResult.term_id);
+                                                        jsSdk.reportItemsAddedToList(
+                                                            [keywordResult.replacement],
+                                                            "Shopping Cart"
+                                                        );
 
                                                         return finalCartItems;
                                                     });
@@ -261,6 +408,7 @@ export const App: FC = (): ReactElement => {
                                             </Button>
                                             <Button
                                                 className="add-to-list-button"
+                                                variant="contained"
                                                 onClick={() => {
                                                     setUserListItems((prevUserListItems) => {
                                                         const finalListItems: Item[] = [];
@@ -284,10 +432,15 @@ export const App: FC = (): ReactElement => {
                                                                 id: keywordResult.term_id,
                                                                 name: keywordResult.replacement,
                                                                 quantity: 1,
+                                                                isCrossedOff: false,
                                                             });
                                                         }
 
                                                         jsSdk.reportKeywordInterceptTermSelected(keywordResult.term_id);
+                                                        jsSdk.reportItemsAddedToList(
+                                                            [keywordResult.replacement],
+                                                            "Shopping List"
+                                                        );
 
                                                         return finalListItems;
                                                     });
@@ -301,18 +454,50 @@ export const App: FC = (): ReactElement => {
                             })}
                         </div>
                     </div>
+                </div>
+                <div className="view-gutter" />
+                <div className="list-view">
+                    <div className="list-header">
+                        <div className="list-name">My Shopping List</div>
+                        <div></div>
+                    </div>
                     <div className="user-list">
                         {userListItems.map((listItem, idx) => {
                             return (
-                                <div key={`user-list-${idx}`}>
-                                    <div>{listItem.id}</div>
-                                    <div>{listItem.name}</div>
-                                    <div>{listItem.quantity}</div>
+                                <div
+                                    key={`user-list-${idx}`}
+                                    className={`user-list-item ${listItem.isCrossedOff ? "item-crossed-off" : ""}`}
+                                >
+                                    <div className="crossed-off-line" />
+                                    <div className="item-id">{listItem.id}</div>
+                                    <div className="item-name">{listItem.name}</div>
+                                    <div className="item-quantity">{listItem.quantity}</div>
+                                    <div className="item-actions">
+                                        <IconButton
+                                            className="complete-item-icon"
+                                            onClick={() => {
+                                                if (!listItem.isCrossedOff) {
+                                                    crossItemOffList(idx);
+                                                }
+                                            }}
+                                        >
+                                            <CheckCircleOutline />
+                                        </IconButton>
+                                        <IconButton
+                                            className="remove-item-icon"
+                                            onClick={() => {
+                                                removeItemFromList(idx);
+                                            }}
+                                        >
+                                            <RemoveCircleOutline />
+                                        </IconButton>
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
                 </div>
+                <div className="view-gutter" />
                 <div className="ad-units">
                     {sdkAppDetails.zonePlacements.map((zone, idx) => {
                         return (
@@ -326,6 +511,7 @@ export const App: FC = (): ReactElement => {
                     })}
                 </div>
                 <Drawer
+                    className="UserCartDrawer"
                     anchor={"right"}
                     open={isCartOpen}
                     onClose={() => {
@@ -333,12 +519,44 @@ export const App: FC = (): ReactElement => {
                     }}
                 >
                     <div className="user-cart">
+                        <div className="cart-header">
+                            <div className="cart-logo">
+                                <Badge badgeContent={getCartItemCount()} color="primary">
+                                    <ShoppingCartOutlined className="cart-icon" />
+                                </Badge>
+                            </div>
+                            <div className="cart-name">My Cart</div>
+                            <div>
+                                <IconButton
+                                    className="remove-all-items-icon"
+                                    onClick={() => {
+                                        removeAllItemsFromCart();
+                                    }}
+                                >
+                                    <DeleteSweepOutlined />
+                                </IconButton>
+                            </div>
+                        </div>
                         {userCartItems.map((cartItem, idx) => {
                             return (
-                                <div key={`user-cart-${idx}`}>
-                                    <div>{cartItem.id}</div>
-                                    <div>{cartItem.name}</div>
-                                    <div>{cartItem.quantity}</div>
+                                <div
+                                    key={`user-cart-${idx}`}
+                                    className={`user-list-item ${cartItem.isCrossedOff ? "item-crossed-off" : ""}`}
+                                >
+                                    <div className="crossed-off-line" />
+                                    <div className="item-id">{cartItem.id}</div>
+                                    <div className="item-name">{cartItem.name}</div>
+                                    <div className="item-quantity">{cartItem.quantity}</div>
+                                    <div className="item-actions">
+                                        <IconButton
+                                            className="remove-item-icon"
+                                            onClick={() => {
+                                                removeItemFromCart(idx);
+                                            }}
+                                        >
+                                            <RemoveCircleOutline />
+                                        </IconButton>
+                                    </div>
                                 </div>
                             );
                         })}
