@@ -12,7 +12,7 @@ import {
     CheckCircleOutline,
     DeleteSweepOutlined,
 } from "@mui/icons-material";
-import { Badge, Button, Drawer, IconButton } from "@mui/material";
+import { Badge, Button, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton } from "@mui/material";
 
 /**
  * Interface defining the structure of an item.
@@ -71,6 +71,60 @@ interface ZoneDetails {
      */
     height: number;
 }
+
+/**
+ * Interface defining an item that can be added to a list or cart.
+ */
+interface AddToListOrCartItem {
+    /**
+     * The ID of the item/product.
+     */
+    id: string;
+    /**
+     * The item/product name.
+     */
+    name: string;
+    /**
+     * If true, this item is a product supplied by the AdAdapted API.
+     */
+    aaProduct?: boolean;
+}
+
+/**
+ * Interface representing all search results when the user enters an item search.
+ */
+interface SearchResults {
+    /**
+     * The result of the keyword intercept search.
+     */
+    keywordResult: AdadaptedJsSdk.KeywordSearchTerm[];
+    /**
+     * The result of the item search.
+     */
+    itemResult: AddToListOrCartItem[];
+}
+
+/**
+ * All test items that are not provided by AdAdapted's API.
+ */
+const TEST_PRODUCTS: AddToListOrCartItem[] = [
+    {
+        id: "meijer-1",
+        name: "Meijer Shredded Cheddar Cheese",
+    },
+    {
+        id: "kroger-1",
+        name: "Kroger Shredded Cheddar Cheese",
+    },
+    {
+        id: "kraft-1",
+        name: "Kraft Block Cheddar Cheese",
+    },
+    {
+        id: "tillamook-1",
+        name: "Tillamook Block Sharp Cheddar Cheese",
+    },
+];
 
 /**
  * Demo App.
@@ -133,53 +187,14 @@ export const App: FC = (): ReactElement => {
     let keywordSearchTimer: ReturnType<typeof setTimeout> | undefined;
 
     const [jsSdk] = useState(sdk);
-    const [keywordSearchResults, setKeywordSearchResults] = useState<AdadaptedJsSdk.KeywordSearchTerm[]>([]);
+    const [itemSearchResults, setItemSearchResults] = useState<SearchResults>({
+        keywordResult: [],
+        itemResult: [],
+    });
     const [userListItems, setUserListItems] = useState<Item[]>([]);
     const [userCartItems, setUserCartItems] = useState<Item[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
-
-    useEffect(() => {
-        const zonePlacements: { [key: string]: string } = {};
-
-        for (let x = 0; x < sdkAppDetails.zonePlacements.length; x++) {
-            zonePlacements[sdkAppDetails.zonePlacements[x].zoneId] = `zone${x + 1}`;
-        }
-
-        jsSdk
-            .initialize({
-                appId: sdkAppDetails.appId,
-                advertiserId: "JS_SDK_TEST_USER_UDID",
-                allowRetargeting: true,
-                bundleId: "JS_SDK_TEST_APP",
-                bundleVersion: "1.0.0",
-                apiEnv: sdkAppDetails.apiEnv,
-                zonePlacements,
-                onAddToListTriggered: (items) => {
-                    console.log("Items to Add", items);
-                },
-                onPayloadsAvailable: (payloads) => {
-                    console.log("Available Payloads", payloads);
-                },
-            })
-            .then(() => {
-                console.log("SDK Session ID:", jsSdk.getSessionId());
-            })
-            .catch((err) => {
-                console.error(err);
-            });
-    }, []);
-
-    useEffect(() => {
-        if (keywordSearchResults.length) {
-            const termIds: string[] = [];
-
-            for (const result of keywordSearchResults) {
-                termIds.push(result.term_id);
-            }
-
-            jsSdk.reportKeywordInterceptTermsPresented(termIds);
-        }
-    }, [keywordSearchResults]);
+    const [pendingAtlItems, setPendingAtlItems] = useState<AdadaptedJsSdk.DetailedListItem[] | undefined>(undefined);
 
     /**
      * Handles getting the total count of items in the cart.
@@ -272,6 +287,171 @@ export const App: FC = (): ReactElement => {
         setUserCartItems([]);
     };
 
+    /**
+     * Adds the provided items to the list.
+     * @param itemList - The item list to add to the list.
+     * @param keywordTermId - If provided, the selected term ID will be reported.
+     */
+    const addItemsToList = (itemList: AddToListOrCartItem[], keywordTermId?: string): void => {
+        setUserListItems((prevUserListItems) => {
+            const finalListItems = [...prevUserListItems];
+            const itemNameReportList: string[] = [];
+
+            for (const item of itemList) {
+                let itemFound = false;
+
+                for (const listItem of finalListItems) {
+                    if (listItem.id === item.id) {
+                        listItem.quantity = listItem.quantity + 1;
+
+                        itemFound = true;
+
+                        break;
+                    }
+                }
+
+                if (!itemFound) {
+                    finalListItems.push({
+                        id: item.id,
+                        name: item.name,
+                        quantity: 1,
+                        isCrossedOff: false,
+                    });
+                }
+
+                if (item.aaProduct) {
+                    itemNameReportList.push(item.name);
+                }
+            }
+
+            if (keywordTermId) {
+                jsSdk.reportKeywordInterceptTermSelected(keywordTermId);
+            }
+
+            if (itemNameReportList.length) {
+                console.log(12345678);
+                jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
+            }
+
+            return finalListItems;
+        });
+    };
+
+    /**
+     * Adds the provided items to the cart.
+     * @param itemList - The item list to add to the cart.
+     * @param keywordTermId - If provided, the selected term ID will be reported.
+     */
+    const addItemsToCart = (itemList: AddToListOrCartItem[], keywordTermId?: string): void => {
+        setUserCartItems((prevUserCartItems) => {
+            const finalCartItems = [...prevUserCartItems];
+            const itemNameReportList: string[] = [];
+
+            for (const item of itemList) {
+                let itemFound = false;
+
+                for (const cartItem of finalCartItems) {
+                    if (cartItem.id === item.id) {
+                        cartItem.quantity = cartItem.quantity + 1;
+
+                        itemFound = true;
+
+                        break;
+                    }
+                }
+
+                if (!itemFound) {
+                    finalCartItems.push({
+                        id: item.id,
+                        name: item.name,
+                        quantity: 1,
+                    });
+                }
+
+                if (item.aaProduct) {
+                    itemNameReportList.push(item.name);
+                }
+            }
+
+            if (keywordTermId) {
+                jsSdk.reportKeywordInterceptTermSelected(keywordTermId);
+            }
+
+            if (itemNameReportList.length) {
+                jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping Cart");
+            }
+
+            return finalCartItems;
+        });
+    };
+
+    /**
+     * Performs the item search based on user input.
+     * @param searchTerm - The search term to apply.
+     * @returns the list of all items that satisfy the search.
+     */
+    const performItemSearch = (searchTerm: string): AddToListOrCartItem[] => {
+        const finalList: AddToListOrCartItem[] = [];
+
+        for (const item of TEST_PRODUCTS) {
+            if (item.name.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1) {
+                // Item found.
+                finalList.push(item);
+            }
+        }
+
+        return finalList;
+    };
+
+    useEffect(() => {
+        const zonePlacements: { [key: string]: string } = {};
+
+        for (let x = 0; x < sdkAppDetails.zonePlacements.length; x++) {
+            zonePlacements[sdkAppDetails.zonePlacements[x].zoneId] = `zone${x + 1}`;
+        }
+
+        jsSdk
+            .initialize({
+                appId: sdkAppDetails.appId,
+                advertiserId: "JS_SDK_TEST_USER_UDID",
+                allowRetargeting: true,
+                bundleId: "JS_SDK_TEST_APP",
+                bundleVersion: "1.0.0",
+                apiEnv: sdkAppDetails.apiEnv,
+                zonePlacements,
+                onAddToListTriggered: (items) => {
+                    setPendingAtlItems(items);
+                },
+                onPayloadsAvailable: (payloads) => {
+                    console.log("Available Payloads", payloads);
+                },
+            })
+            .then(() => {
+                console.log("SDK Session ID:", jsSdk.getSessionId());
+            })
+            .catch((err) => {
+                console.error(err);
+            });
+    }, []);
+
+    useEffect(() => {
+        if (itemSearchResults.keywordResult.length) {
+            const termIds: string[] = [];
+
+            for (const result of itemSearchResults.keywordResult) {
+                termIds.push(result.term_id);
+            }
+
+            jsSdk.reportKeywordInterceptTermsPresented(termIds);
+        }
+    }, [itemSearchResults.keywordResult]);
+
+    useEffect(() => {
+        if (pendingAtlItems) {
+            setPendingAtlItems(undefined);
+        }
+    }, [userListItems, userCartItems]);
+
     // Returned JSX.
     return (
         <div className="App">
@@ -355,12 +535,15 @@ export const App: FC = (): ReactElement => {
                                 clearTimeout(keywordSearchTimer);
 
                                 keywordSearchTimer = setTimeout(() => {
-                                    setKeywordSearchResults(jsSdk.performKeywordSearch(event.target.value));
+                                    setItemSearchResults({
+                                        keywordResult: jsSdk.performKeywordSearch(event.target.value),
+                                        itemResult: performItemSearch(event.target.value),
+                                    });
                                 }, 300);
                             }}
                         />
                         <div className="keyword-search-results">
-                            {keywordSearchResults.map((keywordResult, idx) => {
+                            {itemSearchResults.keywordResult.map((keywordResult, idx) => {
                                 return (
                                     <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
                                         <div className="item-name">{keywordResult.replacement}</div>
@@ -369,39 +552,16 @@ export const App: FC = (): ReactElement => {
                                                 className="add-to-cart-button"
                                                 variant="contained"
                                                 onClick={() => {
-                                                    setUserCartItems((prevUserCartItems) => {
-                                                        const finalCartItems: Item[] = [];
-                                                        let itemFound = false;
-
-                                                        for (const cartItem of prevUserCartItems) {
-                                                            if (cartItem.id === keywordResult.term_id) {
-                                                                finalCartItems.push({
-                                                                    ...cartItem,
-                                                                    quantity: cartItem.quantity + 1,
-                                                                });
-
-                                                                itemFound = true;
-                                                            } else {
-                                                                finalCartItems.push(cartItem);
-                                                            }
-                                                        }
-
-                                                        if (!itemFound) {
-                                                            finalCartItems.push({
+                                                    addItemsToCart(
+                                                        [
+                                                            {
                                                                 id: keywordResult.term_id,
                                                                 name: keywordResult.replacement,
-                                                                quantity: 1,
-                                                            });
-                                                        }
-
-                                                        jsSdk.reportKeywordInterceptTermSelected(keywordResult.term_id);
-                                                        jsSdk.reportItemsAddedToList(
-                                                            [keywordResult.replacement],
-                                                            "Shopping Cart"
-                                                        );
-
-                                                        return finalCartItems;
-                                                    });
+                                                                aaProduct: true,
+                                                            },
+                                                        ],
+                                                        keywordResult.term_id
+                                                    );
                                                 }}
                                             >
                                                 Add to Cart
@@ -410,40 +570,43 @@ export const App: FC = (): ReactElement => {
                                                 className="add-to-list-button"
                                                 variant="contained"
                                                 onClick={() => {
-                                                    setUserListItems((prevUserListItems) => {
-                                                        const finalListItems: Item[] = [];
-                                                        let itemFound = false;
-
-                                                        for (const listItem of prevUserListItems) {
-                                                            if (listItem.id === keywordResult.term_id) {
-                                                                finalListItems.push({
-                                                                    ...listItem,
-                                                                    quantity: listItem.quantity + 1,
-                                                                });
-
-                                                                itemFound = true;
-                                                            } else {
-                                                                finalListItems.push(listItem);
-                                                            }
-                                                        }
-
-                                                        if (!itemFound) {
-                                                            finalListItems.push({
+                                                    addItemsToList(
+                                                        [
+                                                            {
                                                                 id: keywordResult.term_id,
                                                                 name: keywordResult.replacement,
-                                                                quantity: 1,
-                                                                isCrossedOff: false,
-                                                            });
-                                                        }
-
-                                                        jsSdk.reportKeywordInterceptTermSelected(keywordResult.term_id);
-                                                        jsSdk.reportItemsAddedToList(
-                                                            [keywordResult.replacement],
-                                                            "Shopping List"
-                                                        );
-
-                                                        return finalListItems;
-                                                    });
+                                                                aaProduct: true,
+                                                            },
+                                                        ],
+                                                        keywordResult.term_id
+                                                    );
+                                                }}
+                                            >
+                                                Add to List
+                                            </Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {itemSearchResults.itemResult.map((itemResult, idx) => {
+                                return (
+                                    <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
+                                        <div className="item-name">{itemResult.name}</div>
+                                        <div className="item-options">
+                                            <Button
+                                                className="add-to-cart-button"
+                                                variant="contained"
+                                                onClick={() => {
+                                                    addItemsToCart([itemResult]);
+                                                }}
+                                            >
+                                                Add to Cart
+                                            </Button>
+                                            <Button
+                                                className="add-to-list-button"
+                                                variant="contained"
+                                                onClick={() => {
+                                                    addItemsToList([itemResult]);
                                                 }}
                                             >
                                                 Add to List
@@ -459,7 +622,16 @@ export const App: FC = (): ReactElement => {
                 <div className="list-view">
                     <div className="list-header">
                         <div className="list-name">My Shopping List</div>
-                        <div></div>
+                        <div className="header-actions">
+                            <IconButton
+                                className="remove-all-items-from-list-icon"
+                                onClick={() => {
+                                    removeAllItemsFromList();
+                                }}
+                            >
+                                <DeleteSweepOutlined />
+                            </IconButton>
+                        </div>
                     </div>
                     <div className="user-list">
                         {userListItems.map((listItem, idx) => {
@@ -510,6 +682,63 @@ export const App: FC = (): ReactElement => {
                         );
                     })}
                 </div>
+                <Dialog className="pending-atl-items-dialog" open={!!pendingAtlItems} disableEscapeKeyDown={true}>
+                    <DialogTitle>Where would you like your items to go?</DialogTitle>
+                    <DialogContent>
+                        {pendingAtlItems?.map((item, idx) => {
+                            return (
+                                <div key={`pending-atl-item-${idx}`} className="pending-item-row">
+                                    <div className="pending-item-id">{item.product_barcode}</div>
+                                    <div className="pending-item-name">{item.product_title}</div>
+                                </div>
+                            );
+                        })}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button
+                            className="dialog-add-to-cart-button"
+                            variant="contained"
+                            onClick={() => {
+                                const finalItems: AddToListOrCartItem[] = [];
+
+                                if (pendingAtlItems) {
+                                    for (const item of pendingAtlItems) {
+                                        finalItems.push({
+                                            id: item.product_barcode,
+                                            name: item.product_title,
+                                            aaProduct: true,
+                                        });
+                                    }
+                                }
+
+                                addItemsToCart(finalItems);
+                            }}
+                        >
+                            My Cart
+                        </Button>
+                        <Button
+                            className="dialog-add-to-list-button"
+                            variant="contained"
+                            onClick={() => {
+                                const finalItems: AddToListOrCartItem[] = [];
+
+                                if (pendingAtlItems) {
+                                    for (const item of pendingAtlItems) {
+                                        finalItems.push({
+                                            id: item.product_barcode,
+                                            name: item.product_title,
+                                            aaProduct: true,
+                                        });
+                                    }
+                                }
+
+                                addItemsToList(finalItems);
+                            }}
+                        >
+                            My Shopping List
+                        </Button>
+                    </DialogActions>
+                </Dialog>
                 <Drawer
                     className="UserCartDrawer"
                     anchor={"right"}
@@ -528,7 +757,7 @@ export const App: FC = (): ReactElement => {
                             <div className="cart-name">My Cart</div>
                             <div>
                                 <IconButton
-                                    className="remove-all-items-icon"
+                                    className="remove-all-items-from-cart-icon"
                                     onClick={() => {
                                         removeAllItemsFromCart();
                                     }}

@@ -146,11 +146,30 @@ body {
                 .list-name {
                     display: flex;
                     align-items: center;
+                    flex: 1 1 auto;
                     color: #ffffff;
                     font-size: 20px;
                     font-weight: 500;
                     user-select: none;
                     margin-left: 20px;
+                }
+
+                .header-actions {
+                    display: flex;
+                    align-items: center;
+                    flex: 0 0 auto;
+
+                    .remove-all-items-from-list-icon {
+                        flex: 0 0 auto;
+                        margin-right: 5px;
+                        margin-left: 16px;
+
+                        svg {
+                            width: 30px;
+                            height: 30px;
+                            color: #ff7b7b;
+                        }
+                    }
                 }
             }
 
@@ -261,6 +280,32 @@ body {
     }
 }
 
+.pending-atl-items-dialog {
+    .pending-item-row {
+        display: flex;
+        flex-direction: row;
+
+        .pending-item-id {
+            flex: 0 0 auto;
+            margin-right: 10px;
+        }
+
+        .pending-item-name {
+            flex: 1 1 auto;
+        }
+    }
+
+    .dialog-add-to-cart-button {
+        color: #ffffff;
+        background-color: #de4cf2 !important;
+    }
+
+    .dialog-add-to-list-button {
+        color: #ffffff;
+        background-color: #00ad4c !important;
+    }
+}
+
 .UserCartDrawer {
     .user-cart {
         display: flex;
@@ -297,7 +342,7 @@ body {
                 user-select: none;
             }
 
-            .remove-all-items-icon {
+            .remove-all-items-from-cart-icon {
                 flex: 0 0 auto;
                 margin-right: 20px;
                 margin-left: 16px;
