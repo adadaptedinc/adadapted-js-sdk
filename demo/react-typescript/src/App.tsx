@@ -8,11 +8,25 @@ import AdadaptedJsSdk from "@adadapted/js-sdk/src_new";
 import TextField from "@mui/material/TextField";
 import {
     ShoppingCartOutlined,
+    AddShoppingCartOutlined,
+    PlaylistAddOutlined,
     RemoveCircleOutline,
     CheckCircleOutline,
     DeleteSweepOutlined,
+    InfoOutlined,
 } from "@mui/icons-material";
-import { Badge, Button, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton } from "@mui/material";
+import {
+    Badge,
+    Button,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Drawer,
+    IconButton,
+    InputAdornment,
+    Tooltip,
+} from "@mui/material";
 
 /**
  * Interface defining the structure of an item.
@@ -124,6 +138,66 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
         id: "tillamook-1",
         name: "Tillamook Block Sharp Cheddar Cheese",
     },
+    {
+        id: "folgers-1",
+        name: "Folgers Classic Roast",
+    },
+    {
+        id: "caribou-1",
+        name: "Caribou Coffee Medium Roast",
+    },
+    {
+        id: "dunkin-1",
+        name: "Dunkin' Medium Roast Coffee",
+    },
+    {
+        id: "coke-1",
+        name: "Coka-Cola",
+    },
+    {
+        id: "coke-2",
+        name: "Diet Coke",
+    },
+    {
+        id: "coke-3",
+        name: "Cherry Coke",
+    },
+    {
+        id: "glisten-1",
+        name: "Glisten Garbage Disposer",
+    },
+    {
+        id: "lemishine-1",
+        name: "Lemi Shine Disposal Cleaner",
+    },
+    {
+        id: "lysol-1",
+        name: "Lysol Kitchen Cleaner",
+    },
+    {
+        id: "windex-1",
+        name: "Windex Glass Cleaner",
+    },
+    {
+        id: "meijer-2",
+        name: "Meijer Whole Milk",
+    },
+    {
+        id: "horizon-1",
+        name: "Horizon Organic Whole Milk",
+    },
+    {
+        id: "prairiefarms-1",
+        name: "Prairie Farms 2% Milk",
+    },
+    {
+        id: "fairlife-3",
+        name: "Fairlife 2% Milk",
+    },
+    {
+        id: "clorox-3",
+        name: "Clorox Toilet Bowl Cleaner",
+    },
 ];
 
 /**
@@ -195,6 +269,9 @@ export const App: FC = (): ReactElement => {
     const [userCartItems, setUserCartItems] = useState<Item[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [pendingAtlItems, setPendingAtlItems] = useState<AdadaptedJsSdk.DetailedListItem[] | undefined>(undefined);
+    const [availableKeywordIntercepts, setAvailableKeywordIntercepts] = useState<
+        AdadaptedJsSdk.KeywordSearchTerm[] | undefined
+    >(undefined);
 
     /**
      * Handles getting the total count of items in the cart.
@@ -329,7 +406,6 @@ export const App: FC = (): ReactElement => {
             }
 
             if (itemNameReportList.length) {
-                console.log(12345678);
                 jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
             }
 
@@ -393,14 +469,34 @@ export const App: FC = (): ReactElement => {
     const performItemSearch = (searchTerm: string): AddToListOrCartItem[] => {
         const finalList: AddToListOrCartItem[] = [];
 
-        for (const item of TEST_PRODUCTS) {
-            if (item.name.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1) {
-                // Item found.
-                finalList.push(item);
+        if (searchTerm) {
+            for (const item of TEST_PRODUCTS) {
+                if (item.name.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1) {
+                    // Item found.
+                    finalList.push(item);
+                }
             }
         }
 
         return finalList;
+    };
+
+    /**
+     * Get the available keywords, if any.
+     * @returns all available keywords comma separated.
+     */
+    const getAvailableUniqueKeywordsString = (): string => {
+        let finalString = "No Keywords Available";
+
+        if (availableKeywordIntercepts) {
+            const keywords = availableKeywordIntercepts.map((keyword) => {
+                return keyword.term.toLowerCase();
+            });
+
+            finalString = [...new Set(keywords)].join(", ");
+        }
+
+        return finalString;
     };
 
     useEffect(() => {
@@ -428,6 +524,14 @@ export const App: FC = (): ReactElement => {
             })
             .then(() => {
                 console.log("SDK Session ID:", jsSdk.getSessionId());
+
+                setTimeout(() => {
+                    const availableKeywordIntercepts = jsSdk.getAvailableKeywordIntercepts();
+
+                    console.log("Available Keyword Intercepts:", availableKeywordIntercepts);
+
+                    setAvailableKeywordIntercepts(availableKeywordIntercepts);
+                }, 2000);
             })
             .catch((err) => {
                 console.error(err);
@@ -531,6 +635,22 @@ export const App: FC = (): ReactElement => {
                             className="item-search-input"
                             label="Item Search"
                             variant="outlined"
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <Tooltip
+                                            title={
+                                                availableKeywordIntercepts
+                                                    ? `Available Keywords: ${getAvailableUniqueKeywordsString()}`
+                                                    : ""
+                                            }
+                                            placement="bottom"
+                                        >
+                                            <InfoOutlined />
+                                        </Tooltip>
+                                    </InputAdornment>
+                                ),
+                            }}
                             onChange={(event) => {
                                 clearTimeout(keywordSearchTimer);
 
@@ -546,7 +666,10 @@ export const App: FC = (): ReactElement => {
                             {itemSearchResults.keywordResult.map((keywordResult, idx) => {
                                 return (
                                     <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
-                                        <div className="item-name">{keywordResult.replacement}</div>
+                                        <div className="item-name">
+                                            <div className="ad-badge">AD</div>
+                                            {keywordResult.replacement}
+                                        </div>
                                         <div className="item-options">
                                             <Button
                                                 className="add-to-cart-button"
@@ -564,7 +687,9 @@ export const App: FC = (): ReactElement => {
                                                     );
                                                 }}
                                             >
-                                                Add to Cart
+                                                <Tooltip title="Add to Cart" placement="bottom">
+                                                    <AddShoppingCartOutlined className="add-to-cart-icon" />
+                                                </Tooltip>
                                             </Button>
                                             <Button
                                                 className="add-to-list-button"
@@ -582,7 +707,9 @@ export const App: FC = (): ReactElement => {
                                                     );
                                                 }}
                                             >
-                                                Add to List
+                                                <Tooltip title="Add to List" placement="bottom">
+                                                    <PlaylistAddOutlined className="add-to-list-icon" />
+                                                </Tooltip>
                                             </Button>
                                         </div>
                                     </div>
@@ -600,7 +727,9 @@ export const App: FC = (): ReactElement => {
                                                     addItemsToCart([itemResult]);
                                                 }}
                                             >
-                                                Add to Cart
+                                                <Tooltip title="Add to Cart" placement="bottom">
+                                                    <AddShoppingCartOutlined className="add-to-cart-icon" />
+                                                </Tooltip>
                                             </Button>
                                             <Button
                                                 className="add-to-list-button"
@@ -609,7 +738,9 @@ export const App: FC = (): ReactElement => {
                                                     addItemsToList([itemResult]);
                                                 }}
                                             >
-                                                Add to List
+                                                <Tooltip title="Add to List" placement="bottom">
+                                                    <PlaylistAddOutlined className="add-to-list-icon" />
+                                                </Tooltip>
                                             </Button>
                                         </div>
                                     </div>
@@ -625,6 +756,7 @@ export const App: FC = (): ReactElement => {
                         <div className="header-actions">
                             <IconButton
                                 className="remove-all-items-from-list-icon"
+                                disabled={userListItems.length === 0}
                                 onClick={() => {
                                     removeAllItemsFromList();
                                 }}
@@ -758,6 +890,7 @@ export const App: FC = (): ReactElement => {
                             <div>
                                 <IconButton
                                     className="remove-all-items-from-cart-icon"
+                                    disabled={userCartItems.length === 0}
                                     onClick={() => {
                                         removeAllItemsFromCart();
                                     }}

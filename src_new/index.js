@@ -26,12 +26,21 @@ class AdadaptedJsSdk {
         this.cycleAdTimers = {};
         this.initialBodyOverflowStyle = document.body.style.overflow;
 
+        /**
+         * Triggered when the ad zone has refreshed.
+         */
         this.onAdZonesRefreshed = () => {
             // Defaulting to empty method.
         };
+        /**
+         * Triggered when the add-to-list action has occurred.
+         */
         this.onAddToListTriggered = () => {
             // Defaulting to empty method.
         };
+        /**
+         * Triggered when payloads are available for processing.
+         */
         this.onPayloadsAvailable = () => {
             // Defaulting to empty method.
         };
@@ -39,10 +48,24 @@ class AdadaptedJsSdk {
 
     /**
      * Gets the current session ID.
+     * NOTE: This is only exposed for developer validation if needed.
      * @returns the current session ID.
      */
     getSessionId() {
         return this.sessionId;
+    }
+
+    /**
+     * Gets all available keyword intercepts.
+     * NOTE: This is only exposed for developer validation if needed.
+     * @returns the available keyword intercepts.
+     */
+    getAvailableKeywordIntercepts() {
+        return this.keywordIntercepts &&
+            this.keywordIntercepts.terms &&
+            this.keywordIntercepts.terms.length
+            ? this.keywordIntercepts.terms
+            : undefined;
     }
 
     /**
@@ -641,9 +664,8 @@ class AdadaptedJsSdk {
 
             for (const adZone of this.adZones) {
                 const zonePlacementId = this.zonePlacements[adZone.zoneId];
-                const containerElement = document.getElementById(
-                    zonePlacementId
-                );
+                const containerElement =
+                    document.getElementById(zonePlacementId);
 
                 if (zonePlacementId && containerElement) {
                     containerElement.innerHTML = "";
@@ -722,6 +744,11 @@ class AdadaptedJsSdk {
         adZoneClickableArea.style.position = "absolute";
         adZoneClickableArea.style.top = "0";
         adZoneClickableArea.style.left = "0";
+
+        /**
+         * Triggered when the ad zone clickable area has been clicked.
+         * @param {Event} event - The click event.
+         */
         adZoneClickableArea.onclick = (event) => {
             event.preventDefault();
 
@@ -817,6 +844,10 @@ class AdadaptedJsSdk {
         adPopoverIFrame.style.marginTop = safeAreaIframeMarginTop;
         adPopoverIFrame.style.zIndex = "999999998";
         adPopoverIFrame.style.WebkitOverflowScrolling = "touch";
+
+        /**
+         * Triggered when the iFrame has loaded.
+         */
         adPopoverIFrame.onload = () => {
             // Remove the loading indicator.
             const loadingIndicator = document.getElementsByClassName(
@@ -850,6 +881,10 @@ class AdadaptedJsSdk {
         adPopoverFooterCloseButton.style.cursor = "pointer";
         adPopoverFooterCloseButton.style.borderRadius = "4px";
         adPopoverFooterCloseButton.style.margin = "5px";
+
+        /**
+         * Triggered when the close button is clicked.
+         */
         adPopoverFooterCloseButton.onclick = () => {
             const popoverContainer = document.getElementById(
                 "adContentsPopoverContainer"
@@ -1096,9 +1131,8 @@ class AdadaptedJsSdk {
                 adZone.adZone = adZoneContainer;
 
                 const zonePlacementId = this.zonePlacements[adZone.zoneId];
-                const containerElement = document.getElementById(
-                    zonePlacementId
-                );
+                const containerElement =
+                    document.getElementById(zonePlacementId);
 
                 if (zonePlacementId && containerElement) {
                     containerElement.innerHTML = "";
@@ -1284,11 +1318,11 @@ class AdadaptedJsSdk {
 
     /**
      * Handles sending an API request.
-     * @param {Object} settings - All settings to apply to the request.
-     * @param {String} settings.method - The request method to use (GET, POST, etc.)
-     * @param {String} settings.url - The URL to use for the request.
+     * @param {object} settings - All settings to apply to the request.
+     * @param {string} settings.method - The request method to use (GET, POST, etc.)
+     * @param {string} settings.url - The URL to use for the request.
      * @param {Array} settings.headers - Array of all request header objects.
-     * @param {Object} settings.requestPayload - All data to send on the body of the request.
+     * @param {object} settings.requestPayload - All data to send on the body of the request.
      * @param {Function} settings.onSuccess - The method that triggers upon successful result of the request.
      * @param {Function} settings.onError - The method that triggers upon unsuccessful result of the request.
      */
@@ -1312,9 +1346,9 @@ class AdadaptedJsSdk {
 
         /**
          * Method triggered upon request error.
+         * @param err - The error that occurred.
          */
         xhr.onerror = (err) => {
-            console.log(err);
             if (settings.onError) {
                 settings.onError();
             }

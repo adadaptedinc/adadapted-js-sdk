@@ -99,6 +99,19 @@ body {
                             flex: 1 1 auto;
                             margin: 0 20px;
                             user-select: none;
+                            position: relative;
+
+                            .ad-badge {
+                                position: absolute;
+                                top: 0;
+                                left: -20px;
+                                background-color: #ff6100;
+                                color: #ffffff;
+                                border-radius: 4px 0 4px 0;
+                                padding: 2px 2px 0 2px;
+                                font-weight: 700;
+                                font-size: 11px;
+                            }
                         }
 
                         .item-options {
@@ -163,6 +176,11 @@ body {
                         flex: 0 0 auto;
                         margin-right: 5px;
                         margin-left: 16px;
+                        transition: opacity 300ms ease;
+
+                        &.Mui-disabled {
+                            opacity: 0.5;
+                        }
 
                         svg {
                             width: 30px;
@@ -271,6 +289,7 @@ body {
 
             .ad-zone {
                 border: 1px solid #00000033;
+                margin-bottom: 20px;
             }
         }
 
@@ -330,6 +349,10 @@ body {
                     height: 30px;
                     color: #ffffff;
                 }
+
+                .MuiBadge-badge {
+                    background-color: #de4cf2;
+                }
             }
 
             .cart-name {
@@ -346,6 +369,11 @@ body {
                 flex: 0 0 auto;
                 margin-right: 20px;
                 margin-left: 16px;
+                transition: opacity 300ms ease;
+
+                &.Mui-disabled {
+                    opacity: 0.5;
+                }
 
                 svg {
                     width: 30px;
@@ -362,27 +390,6 @@ body {
             border: 1px solid #00000033;
             border-radius: 4px;
             margin: 8px 20px 0 20px;
-
-            &.item-crossed-off {
-                .crossed-off-line {
-                    width: calc(100% - 120px);
-                }
-
-                .item-id,
-                .item-name,
-                .item-quantity {
-                    color: #00000033;
-                }
-            }
-
-            .crossed-off-line {
-                position: absolute;
-                width: 0;
-                height: 2px;
-                background-color: #00ad4ccc;
-                margin: 26px 0 28px 20px;
-                transition: width 500ms ease;
-            }
 
             .item-id {
                 display: flex;
@@ -419,13 +426,6 @@ body {
                 flex-direction: row;
                 align-items: center;
                 flex: 0 0 auto;
-
-                .complete-item-icon {
-                    width: 40px;
-                    height: 40px;
-                    margin-right: 8px;
-                    color: #5670e0;
-                }
 
                 .remove-item-icon {
                     width: 40px;

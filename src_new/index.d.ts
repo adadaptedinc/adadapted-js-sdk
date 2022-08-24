@@ -26,9 +26,16 @@ declare class AdadaptedJsSdk {
     onPayloadsAvailable: () => void;
     /**
      * Gets the current session ID.
+     * NOTE: This is only exposed for developer validation if needed.
      * @returns the current session ID.
      */
     getSessionId(): string;
+    /**
+     * Gets all available keyword intercepts.
+     * NOTE: This is only exposed for developer validation if needed.
+     * @returns the available keyword intercepts.
+     */
+    getAvailableKeywordIntercepts(): AdadaptedJsSdk.KeywordSearchTerm[] | undefined;
     /**
      * Initializes the session for the AdAdapted API and sets up the SDK.
      * @param props - The props used to initialize the SDK.
