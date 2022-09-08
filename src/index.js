@@ -172,6 +172,7 @@ class AdadaptedJsSdk {
                         bundle_id: this.bundleId,
                         bundle_version: this.bundleVersion,
                         allow_retargeting: this.allowRetargeting,
+                        created_at: Math.floor(new Date().getTime() / 1000),
                     },
                     onSuccess: (response) => {
                         this.sessionId = response.session_id;
@@ -617,7 +618,7 @@ class AdadaptedJsSdk {
         this.refreshAdZonesTimer = setTimeout(() => {
             this.#sendApiRequest({
                 method: "GET",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}`,
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
                 headers: [
                     {
                         name: "accept",
@@ -1153,7 +1154,7 @@ class AdadaptedJsSdk {
     #getKeywordIntercepts() {
         this.#sendApiRequest({
             method: "GET",
-            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}`,
+            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
             headers: [
                 {
                     name: "accept",

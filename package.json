@@ -2,9 +2,9 @@
     "name": "@adadapted/js-sdk",
     "description": "The AdAdapted JS SDK.",
     "version": "1.0.6",
-    "main": "src_new/index.js",
-    "module": "src_new/index.js",
-    "types": "src_new/**/*.d.ts",
+    "main": "src/index.js",
+    "module": "src/index.js",
+    "types": "src/**/*.d.ts",
     "scripts": {
         "prettier-fix": "prettier --write \"*.{ts,tsx,js,jsx,json,css,scss,md}\" \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
         "lint": "eslint --version && eslint ./",

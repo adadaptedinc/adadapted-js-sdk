@@ -35,7 +35,9 @@ declare class AdadaptedJsSdk {
      * NOTE: This is only exposed for developer validation if needed.
      * @returns the available keyword intercepts.
      */
-    getAvailableKeywordIntercepts(): AdadaptedJsSdk.KeywordSearchTerm[] | undefined;
+    getAvailableKeywordIntercepts():
+        | AdadaptedJsSdk.KeywordSearchTerm[]
+        | undefined;
     /**
      * Initializes the session for the AdAdapted API and sets up the SDK.
      * @param props - The props used to initialize the SDK.
@@ -44,8 +46,8 @@ declare class AdadaptedJsSdk {
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
     /**
      * Requests all available Payload server item data for the user.
-     * 
-     * NOTE: If there are payload items available, the onPayloadsAvailable() callback 
+     *
+     * NOTE: If there are payload items available, the onPayloadsAvailable() callback
      * will be triggered and the items will be provided through that method.
      */
     requestPayloadItemData(): void;
@@ -54,15 +56,15 @@ declare class AdadaptedJsSdk {
      * @param adZones - The object of available zones.
      * @returns the array of Ad Zone Info objects.
      */
-    generateAdZones(adZones: {
-        [key: number]: AdadaptedJsSdk.Zone;
-    }): void;
+    generateAdZones(adZones: { [key: number]: AdadaptedJsSdk.Zone }): void;
     /**
      * Searches through available ad keywords based on provided search term.
      * @param searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
      */
-    performKeywordSearch(searchTerm: string): AdadaptedJsSdk.KeywordSearchTerm[];
+    performKeywordSearch(
+        searchTerm: string
+    ): AdadaptedJsSdk.KeywordSearchTerm[];
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
      * This will ensure that the event is properly recorded and enable accuracy in client reports.

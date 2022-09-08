@@ -4,7 +4,7 @@
  */
 import React, { FC, ReactElement, useState, useEffect } from "react";
 import "./App.scss";
-import AdadaptedJsSdk from "@adadapted/js-sdk/src_new";
+import AdadaptedJsSdk from "@adadapted/js-sdk/src";
 import TextField from "@mui/material/TextField";
 import {
     ShoppingCartOutlined,
@@ -198,6 +198,10 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
         id: "clorox-3",
         name: "Clorox Toilet Bowl Cleaner",
     },
+    {
+        id: "aquafina-1",
+        name: "Aquafina Water 20 oz.",
+    },
 ];
 
 /**
@@ -207,10 +211,10 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        appId: "NWY0NTM2YZDMMDQ0", // Android Test Sdk
+        appId: "846ACA0X62F13A62", // AndroidAdapted (v2)
         zonePlacements: [
             {
-                zoneId: "101930",
+                zoneId: "13",
                 width: 320,
                 height: 100,
             },
