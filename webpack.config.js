@@ -75,6 +75,8 @@ module.exports = (env) => {
                             {
                                 loader: "sass-loader",
                                 options: {
+                                    // Prefer `dart-sass`
+                                    implementation: require("sass"),
                                     sourceMap: isSourceMap,
                                 },
                             },
