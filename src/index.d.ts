@@ -3,7 +3,7 @@ export = AdadaptedJsSdk;
  * The AdAdapted JS SDK class.
  */
 declare class AdadaptedJsSdk {
-    appId: string;
+    apiKey: string;
     advertiserId: string;
     bundleId: string;
     bundleVersion: string;
@@ -98,6 +98,13 @@ declare class AdadaptedJsSdk {
      */
     reportItemsDeletedFromList(itemNames: string[], listName: string): void;
     /**
+     * Method that can be triggered when a deeplink or standard URL is recieved 
+     * by the app to see if there are any payloads to be processed from the URL.
+     * NOTE: This method can/will be called by the client when necessary.
+     * @param url - The full deeplink or full standard URL.
+     */
+    handlePayloadLink(url: string): AdadaptedJsSdk.Payload[];
+    /**
      * Client must trigger this method after processing a payload into a user's list.
      * Enables reporting we provided to the client.
      * @param payloadId - The payload ID that we want to acknowledge.
@@ -124,9 +131,10 @@ declare namespace AdadaptedJsSdk {
      */
     export interface InitializeProps {
         /**
-         * The app ID provided by the client.
+         * The API key provided by the client. 
+         * NOTE: Supplied by AdAdapted to the client.
          */
-        appId: string;
+        apiKey: string;
         /**
          * The unique ID used to identify the user. Client must provide this value.
          */

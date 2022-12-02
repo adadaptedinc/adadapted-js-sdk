@@ -111,7 +111,6 @@ module.exports = (env) => {
                                 options: {
                                     presets: [
                                         "@babel/env",
-                                        "@babel/preset-react",
                                         "@babel/preset-typescript",
                                     ],
                                     plugins: [

@@ -12,8 +12,6 @@ node_modules/
 coverage/
 
 # Example Project
-example-react/node_modules/
+demo/react-typescript/node_modules/
 
-# Built Test NPM Package
-adadapted-react-sdk-*.tgz
 .DS_Store

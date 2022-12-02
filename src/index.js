@@ -1,4 +1,5 @@
 import packageJson from "../package.json";
+
 /**
  * The AdAdapted JS SDK class.
  */
@@ -7,7 +8,7 @@ class AdadaptedJsSdk {
      * @inheritDoc
      */
     constructor() {
-        this.appId = "";
+        this.apiKey = "";
         this.advertiserId = "";
         this.bundleId = "js_default_bundleID";
         this.bundleVersion = "js_default_bundleVersion";
@@ -21,6 +22,7 @@ class AdadaptedJsSdk {
         this.sessionInfo = undefined;
         this.adZones = undefined;
         this.refreshAdZonesTimer = undefined;
+        this.refreshSessionTimer = undefined;
         this.keywordIntercepts = undefined;
         this.keywordInterceptSearchValue = "";
         this.cycleAdTimers = {};
@@ -76,7 +78,7 @@ class AdadaptedJsSdk {
     initialize(props) {
         return new Promise((resolve, reject) => {
             // Verify required fields are provided before attempting to initialize the SDK.
-            if (props.appId === undefined || props.appId === null) {
+            if (props.apiKey === undefined || props.apiKey === null) {
                 reject(
                     "App ID must be provided for the AdAdapted SDK to be initialized."
                 );
@@ -96,7 +98,7 @@ class AdadaptedJsSdk {
                 );
             } else {
                 // Set the app ID.
-                this.appId = props.appId;
+                this.apiKey = props.apiKey;
 
                 // Set the unique ID.
                 this.advertiserId = props.advertiserId;
@@ -150,55 +152,13 @@ class AdadaptedJsSdk {
                 this.deviceOs = this.#getOperatingSystem();
 
                 // Initialize the session.
-                this.#sendApiRequest({
-                    method: "POST",
-                    url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
-                    headers: [
-                        {
-                            name: "accept",
-                            value: "*/*",
-                        },
-                        {
-                            name: "Content-Type",
-                            value: "application/json",
-                        },
-                    ],
-                    requestPayload: {
-                        app_id: this.appId,
-                        udid: this.advertiserId,
-                        device_udid: this.advertiserId,
-                        sdk_version: packageJson.version,
-                        device_os: this.deviceOs,
-                        bundle_id: this.bundleId,
-                        bundle_version: this.bundleVersion,
-                        allow_retargeting: this.allowRetargeting,
-                        created_at: Math.floor(new Date().getTime() / 1000),
-                    },
-                    onSuccess: (response) => {
-                        this.sessionId = response.session_id;
-                        this.sessionInfo = response;
-
-                        // Render the Ad Zones.
-                        this.#renderAdZones(response.zones);
-
-                        // Start the session data refresh timer.
-                        this.#onRefreshAdZones();
-
-                        // Get all possible keyword intercept values.
-                        // We don't need to wait for this to complete
-                        // prior to resolving initialization of the SDK.
-                        this.#getKeywordIntercepts();
-
-                        // Make the initial call to the Payload data server to see if
-                        // the user has any outstanding items to be added to list.
-                        this.requestPayloadItemData();
-
+                this.#initializeSession()
+                    .then(() => {
                         resolve();
-                    },
-                    onError: () => {
-                        reject("An error occurred initializing the SDK.");
-                    },
-                });
+                    })
+                    .catch((errorMessage) => {
+                        reject(errorMessage);
+                    });
             }
         });
     }
@@ -212,18 +172,23 @@ class AdadaptedJsSdk {
     requestPayloadItemData() {
         this.#sendApiRequest({
             method: "POST",
-            url: `${this.payloadApiEnv}/v/1/pickup`,
+            // url: `${this.payloadApiEnv}/v/1/pickup`,
+            url: `${this.payloadApiEnv}/v1/users/${this.advertiserId}/payloads?hashUserId=true`,
             headers: [
                 {
                     name: "accept",
                     value: "application/json",
                 },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
+                },
             ],
-            requestPayload: {
-                app_id: this.appId,
-                session_id: this.sessionId,
-                udid: this.advertiserId,
-            },
+            // requestPayload: {
+            //     app_id: this.apiKey,
+            //     session_id: this.sessionId,
+            //     udid: this.advertiserId,
+            // },
             onSuccess: (response) => {
                 const finalItemList = [];
 
@@ -338,7 +303,7 @@ class AdadaptedJsSdk {
                     },
                 ],
                 requestPayload: {
-                    app_id: this.appId,
+                    app_id: this.apiKey,
                     udid: this.advertiserId,
                     session_id: this.sessionId,
                     sdk_version: packageJson.version,
@@ -413,7 +378,7 @@ class AdadaptedJsSdk {
                     },
                 ],
                 requestPayload: {
-                    app_id: this.appId,
+                    app_id: this.apiKey,
                     udid: this.advertiserId,
                     session_id: this.sessionId,
                     sdk_version: packageJson.version,
@@ -455,7 +420,7 @@ class AdadaptedJsSdk {
                     },
                 ],
                 requestPayload: {
-                    app_id: this.appId,
+                    app_id: this.apiKey,
                     udid: this.advertiserId,
                     session_id: this.sessionId,
                     sdk_version: packageJson.version,
@@ -578,6 +543,48 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Method that can be triggered when a deeplink or standard URL is recieved
+     * by the app to see if there are any payloads to be processed from the URL.
+     * NOTE: This method can/will be called by the client when necessary.
+     * @param url - The full deeplink or full standard URL.
+     */
+    handlePayloadLink(url) {
+        const searchStr = "data=";
+        const dataIndex = url.indexOf(searchStr);
+
+        if (dataIndex !== -1) {
+            const encodedData = url.substr(dataIndex + searchStr.length);
+            const payloadData = JSON.parse(atob(encodedData));
+            const payloadId = payloadData["payload_id"];
+            const itemDataList = payloadData["detailed_list_items"];
+
+            if (itemDataList && itemDataList.length > 0) {
+                const finalItemList = [];
+
+                for (const itemData of itemDataList) {
+                    finalItemList.push({
+                        payload_id: payloadId,
+                        detailed_list_items: [
+                            {
+                                product_title: itemData["product_title"],
+                                product_brand: itemData["product_brand"],
+                                product_category: itemData["product_category"],
+                                product_barcode: itemData["product_barcode"],
+                                product_discount: itemData["product_discount"],
+                                product_image: itemData["product_image"],
+                                product_sku: itemData["product_sku"],
+                            },
+                        ],
+                    });
+                }
+
+                // Send the items to the client, so they can add them to the list.
+                this.onPayloadsAvailable(finalItemList);
+            }
+        }
+    }
+
+    /**
      * Client must trigger this method after processing a payload into a user's list.
      * Enables reporting we provided to the client.
      * @param payloadId - The payload ID that we want to acknowledge.
@@ -600,13 +607,101 @@ class AdadaptedJsSdk {
         if (this.refreshAdZonesTimer) {
             clearTimeout(this.refreshAdZonesTimer);
         }
+
+        if (this.refreshSessionTimer) {
+            clearTimeout(this.refreshSessionTimer);
+        }
     }
 
     /**
-     * Triggered when session data is initialized or refreshed.
-     * Creates a timer based on the session data refresh value.
+     * Initializes the session with the API.
      */
-    #onRefreshAdZones() {
+    #initializeSession() {
+        return new Promise((resolve, reject) => {
+            this.#sendApiRequest({
+                method: "POST",
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "*/*",
+                    },
+                    {
+                        name: "Content-Type",
+                        value: "application/json",
+                    },
+                ],
+                requestPayload: {
+                    app_id: this.apiKey,
+                    udid: this.advertiserId,
+                    device_udid: this.advertiserId,
+                    sdk_version: packageJson.version,
+                    device_os: this.deviceOs,
+                    bundle_id: this.bundleId,
+                    bundle_version: this.bundleVersion,
+                    allow_retargeting: this.allowRetargeting,
+                    created_at: Math.floor(new Date().getTime() / 1000),
+                },
+                onSuccess: (response) => {
+                    this.sessionId = response.session_id;
+                    this.sessionInfo = response;
+
+                    // Render the Ad Zones.
+                    this.#renderAdZones(response.zones);
+
+                    // Start the session refresh timer.
+                    this.#createSessionRefreshTimer();
+
+                    // Start the ad zone data refresh timer.
+                    this.#createRefreshAdZonesTimer();
+
+                    // Get all possible keyword intercept values.
+                    // We don't need to wait for this to complete
+                    // prior to resolving initialization of the SDK.
+                    this.#getKeywordIntercepts();
+
+                    // Make the initial call to the Payload data server to see if
+                    // the user has any outstanding items to be added to list.
+                    this.requestPayloadItemData();
+
+                    resolve();
+                },
+                onError: () => {
+                    reject("An error occurred initializing the SDK.");
+                },
+            });
+        });
+    }
+
+    /**
+     * Creates a timer to refresh the session prior to its expiration.
+     */
+    #createSessionRefreshTimer() {
+        const expiration = new Date(0); // 0 sets the date to the epoch to start off
+        expiration.setUTCSeconds(this.sessionInfo.session_expires_at);
+
+        const currentTimeMilliseconds = new Date().getTime();
+        const expirationTimeMilliseconds = expiration.getTime();
+        const totalMillisecondsUntilExpire =
+            expirationTimeMilliseconds - currentTimeMilliseconds;
+
+        // The timer will trigger 1 minute prior to the expiration of the session.
+        this.refreshSessionTimer = setTimeout(() => {
+            this.#initializeSession()
+                .then(() => {
+                    resolve();
+                })
+                .catch((errorMessage) => {
+                    reject(errorMessage);
+                });
+        }, totalMillisecondsUntilExpire - 60000);
+    }
+
+    /**
+     * Creates a timer based on the session data refresh value.
+     * Used to refresh ad zones at the required amount of time.
+     */
+    #createRefreshAdZonesTimer() {
         // Get the amount of time we will wait until a refresh occurs.
         // We are setting a minimum refresh time of 5 minutes, so if a
         // value provided by the API is lower, we don't refresh too often.
@@ -618,7 +713,7 @@ class AdadaptedJsSdk {
         this.refreshAdZonesTimer = setTimeout(() => {
             this.#sendApiRequest({
                 method: "GET",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
                 headers: [
                     {
                         name: "accept",
@@ -636,14 +731,14 @@ class AdadaptedJsSdk {
                     this.onAdZonesRefreshed();
 
                     // Start the timer again based on the new session data.
-                    this.#onRefreshAdZones();
+                    this.#createRefreshAdZonesTimer();
                 },
                 onError: () => {
                     console.error("An error occurred refreshing the ad zones.");
 
                     // Start the timer again so we can make another
                     // attempt to refresh the session data.
-                    this.#onRefreshAdZones();
+                    this.#createRefreshAdZonesTimer();
                 },
             });
         }, timerMs);
@@ -1021,7 +1116,7 @@ class AdadaptedJsSdk {
                 },
             ],
             requestPayload: {
-                app_id: this.appId,
+                app_id: this.apiKey,
                 session_id: this.sessionId,
                 udid: this.advertiserId,
                 sdk_version: packageJson.version,
@@ -1154,7 +1249,7 @@ class AdadaptedJsSdk {
     #getKeywordIntercepts() {
         this.#sendApiRequest({
             method: "GET",
-            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.appId}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
+            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
             headers: [
                 {
                     name: "accept",
@@ -1226,7 +1321,7 @@ class AdadaptedJsSdk {
 
         return {
             session_id: this.sessionId,
-            app_id: this.appId,
+            app_id: this.apiKey,
             udid: this.advertiserId,
             events: eventList,
             sdk_version: packageJson.version,
@@ -1234,13 +1329,6 @@ class AdadaptedJsSdk {
             bundle_version: this.bundleVersion,
         };
     }
-
-    /**
-     * Takes the deep link URL and extracts out the payload items
-     * data to send to the client for adding to a user's list.
-     * @param event - The event containing URL related info.
-     */
-    #handleDeepLink(event) {}
 
     /**
      * Determine the mobile operating system.
@@ -1429,13 +1517,13 @@ class AdadaptedJsSdk {
         /**
          * The production API environment.
          */
-        Prod: "https://payload.adadapted.com",
-        // Prod: "https://api.payloads.adadapted.com",
+        // Prod: "https://payload.adadapted.com",
+        Prod: "https://api.payloads.adadapted.com",
         /**
          * The development API environment.
          */
-        Dev: "https://sandpayload.adadapted.com",
-        // Dev: "https://api.payloads.adadapted.dev",
+        // Dev: "https://sandpayload.adadapted.com",
+        Dev: "https://api.stg.payloads.adadapted.dev",
         /**
          * Used only for unit testing/mocking data.
          */

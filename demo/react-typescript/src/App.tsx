@@ -59,9 +59,9 @@ interface SdkDetails {
      */
     apiEnv: "dev" | "prod";
     /**
-     * The ID of the App the SDK connection is for.
+     * The API key the SDK connection is for.
      */
-    appId: string;
+    apiKey: string;
     /**
      * The zone placement mappings array.
      */
@@ -211,7 +211,7 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        appId: "846ACA0X62F13A62", // AndroidAdapted (v2)
+        apiKey: "846ACA0X62F13A62", // AndroidAdapted (v2)
         zonePlacements: [
             {
                 zoneId: "13",
@@ -223,7 +223,7 @@ export const App: FC = (): ReactElement => {
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "dev",
-    //     appId: "NTGXMTA3ZWJJYWZL", // BigOven - Android
+    //     apiKey: "NTGXMTA3ZWJJYWZL", // BigOven - Android
     //     zonePlacements: [
     //         {
     //             zoneId: "100862",
@@ -245,7 +245,7 @@ export const App: FC = (): ReactElement => {
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "prod",
-    //     appId: "NWMWZWUYNTJKMDQ1", // Any.do - Android
+    //     apiKey: "NWMWZWUYNTJKMDQ1", // Any.do - Android
     //     zonePlacements: [
     //         {
     //             zoneId: "100908",
@@ -512,7 +512,7 @@ export const App: FC = (): ReactElement => {
 
         jsSdk
             .initialize({
-                appId: sdkAppDetails.appId,
+                apiKey: sdkAppDetails.apiKey,
                 advertiserId: "JS_SDK_TEST_USER_UDID",
                 allowRetargeting: true,
                 bundleId: "JS_SDK_TEST_APP",
@@ -523,7 +523,13 @@ export const App: FC = (): ReactElement => {
                     setPendingAtlItems(items);
                 },
                 onPayloadsAvailable: (payloads) => {
-                    console.log("Available Payloads", payloads);
+                    const payloadItems: AdadaptedJsSdk.DetailedListItem[] = [];
+
+                    for (const payload of payloads) {
+                        payloadItems.push(...payload.detailed_list_items);
+                    }
+
+                    setPendingAtlItems(payloadItems);
                 },
             })
             .then(() => {
@@ -535,6 +541,9 @@ export const App: FC = (): ReactElement => {
                     console.log("Available Keyword Intercepts:", availableKeywordIntercepts);
 
                     setAvailableKeywordIntercepts(availableKeywordIntercepts);
+
+                    // Check if we need to handle a deeplink.
+                    jsSdk.handlePayloadLink(window.location.href);
                 }, 2000);
             })
             .catch((err) => {

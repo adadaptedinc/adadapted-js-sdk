@@ -1,5 +1,5 @@
 .cache-loader/
-example-react/
+demo/
 node_modules/
 coverage/
 __mocks__/
@@ -13,5 +13,4 @@ __mocks__/
 jest.setup.ts
 tsconfig.json
 webpack.config.js
-adadapted-react-sdk-*.tgz
 .DS_Store
