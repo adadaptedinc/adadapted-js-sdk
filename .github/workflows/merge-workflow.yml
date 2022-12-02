@@ -37,10 +37,10 @@ jobs:
               run: npm run prettier
             - name: Linting Validation
               run: npm run lint
-            - name: Build Validation
-              run: npm run compile
-            - name: Unit Test Validation
-              run: npm run test
+            # - name: Build Validation
+            #   run: npm run compile
+            # - name: Unit Test Validation
+            #   run: npm run test
     deploy_production:
         if: ${{ github.ref_name == 'master' }}
         needs: [code_validation]
