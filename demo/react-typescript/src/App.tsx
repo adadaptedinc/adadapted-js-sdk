@@ -211,10 +211,10 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "846ACA0X62F13A62", // AndroidAdapted (v2)
+        apiKey: "7D58810X6333241C",
         zonePlacements: [
             {
-                zoneId: "13",
+                zoneId: "102110",
                 width: 320,
                 height: 100,
             },
@@ -262,7 +262,7 @@ export const App: FC = (): ReactElement => {
 
     const sdk = new AdadaptedJsSdk();
 
-    let keywordSearchTimer: ReturnType<typeof setTimeout> | undefined;
+    let keywordSearchTimer: number | undefined;
 
     const [jsSdk] = useState(sdk);
     const [itemSearchResults, setItemSearchResults] = useState<SearchResults>({
@@ -543,7 +543,7 @@ export const App: FC = (): ReactElement => {
                     setAvailableKeywordIntercepts(availableKeywordIntercepts);
 
                     // Check if we need to handle a deeplink.
-                    jsSdk.handlePayloadLink(window.location.href);
+                    jsSdk.decodePayloadDeepLink(window.location.href);
                 }, 2000);
             })
             .catch((err) => {
@@ -667,7 +667,7 @@ export const App: FC = (): ReactElement => {
                             onChange={(event) => {
                                 clearTimeout(keywordSearchTimer);
 
-                                keywordSearchTimer = setTimeout(() => {
+                                keywordSearchTimer = window.setTimeout(() => {
                                     setItemSearchResults({
                                         keywordResult: jsSdk.performKeywordSearch(event.target.value),
                                         itemResult: performItemSearch(event.target.value),

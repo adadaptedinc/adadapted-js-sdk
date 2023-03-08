@@ -172,23 +172,18 @@ class AdadaptedJsSdk {
     requestPayloadItemData() {
         this.#sendApiRequest({
             method: "POST",
-            // url: `${this.payloadApiEnv}/v/1/pickup`,
-            url: `${this.payloadApiEnv}/v1/users/${this.advertiserId}/payloads?hashUserId=true`,
+            url: `${this.payloadApiEnv}/v/1/pickup`,
             headers: [
                 {
                     name: "accept",
                     value: "application/json",
                 },
-                {
-                    name: "x-api-key",
-                    value: this.apiKey,
-                },
             ],
-            // requestPayload: {
-            //     app_id: this.apiKey,
-            //     session_id: this.sessionId,
-            //     udid: this.advertiserId,
-            // },
+            requestPayload: {
+                app_id: this.apiKey,
+                session_id: this.sessionId,
+                udid: this.advertiserId,
+            },
             onSuccess: (response) => {
                 const finalItemList = [];
 
@@ -548,7 +543,7 @@ class AdadaptedJsSdk {
      * NOTE: This method can/will be called by the client when necessary.
      * @param url - The full deeplink or full standard URL.
      */
-    handlePayloadLink(url) {
+    decodePayloadDeepLink(url) {
         const searchStr = "data=";
         const dataIndex = url.indexOf(searchStr);
 
@@ -1517,13 +1512,11 @@ class AdadaptedJsSdk {
         /**
          * The production API environment.
          */
-        // Prod: "https://payload.adadapted.com",
-        Prod: "https://api.payloads.adadapted.com",
+        Prod: "https://payload.adadapted.com",
         /**
          * The development API environment.
          */
-        // Dev: "https://sandpayload.adadapted.com",
-        Dev: "https://api.stg.payloads.adadapted.dev",
+        Dev: "https://sandpayload.adadapted.com",
         /**
          * Used only for unit testing/mocking data.
          */
