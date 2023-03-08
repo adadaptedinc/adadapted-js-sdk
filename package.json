@@ -1,7 +1,7 @@
 {
     "name": "@adadapted/js-sdk",
     "description": "The AdAdapted JS SDK.",
-    "version": "1.0.6",
+    "version": "1.1.0",
     "main": "src/index.js",
     "module": "src/index.js",
     "types": "src/**/*.d.ts",
@@ -10,6 +10,7 @@
         "lint": "eslint --version && eslint ./",
         "compile": "tsc --version && tsc --project tsconfig.json --noEmit --noErrorTruncation --pretty",
         "test-coverage": "rm -rf coverage && jest --version && jest --coverage",
+        "enable-git-hooks": "git config core.hooksPath .git-hooks",
         "test": "jest --version && jest",
         "prettier": "prettier --list-different \"*.{ts,tsx,js,jsx,json,css,scss,md}\" \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
         "npm-check-outdated": "npm outdated",
