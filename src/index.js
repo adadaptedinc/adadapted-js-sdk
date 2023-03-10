@@ -21,6 +21,7 @@ class AdadaptedJsSdk {
         this.sessionId = undefined;
         this.sessionInfo = undefined;
         this.adZones = undefined;
+        this.lastSelectedATL = undefined;
         this.refreshAdZonesTimer = undefined;
         this.refreshSessionTimer = undefined;
         this.keywordIntercepts = undefined;
@@ -72,7 +73,7 @@ class AdadaptedJsSdk {
 
     /**
      * Initializes the session for the AdAdapted API and sets up the SDK.
-     * @param props - The props used to initialize the SDK.
+     * @param {object} props - The props used to initialize the SDK.
      * @returns a Promise of void.
      */
     initialize(props) {
@@ -221,7 +222,7 @@ class AdadaptedJsSdk {
 
     /**
      * Searches through available ad keywords based on provided search term.
-     * @param searchTerm - The search term used to match against available keyword intercepts.
+     * @param {string} searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
      */
     performKeywordSearch(searchTerm) {
@@ -327,7 +328,7 @@ class AdadaptedJsSdk {
      * All terms that satisfy a search don't have to be presented, so only provide term IDs for the
      * terms that ultimately get presented to the user.
      * NOTE: This will ensure that the event is properly recorded and enable accuracy in client reports.
-     * @param termIds - The keyword intercept term IDs list to trigger the event for.
+     * @param {string[]} termIds - The keyword intercept term IDs list to trigger the event for.
      */
     reportKeywordInterceptTermsPresented(termIds) {
         const termObjs = [];
@@ -393,7 +394,7 @@ class AdadaptedJsSdk {
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
      * This will ensure that the event is properly recorded and enable accuracy in client reports.
-     * @param termId - The term ID to trigger the event for.
+     * @param {string} termId - The term ID to trigger the event for.
      */
     reportKeywordInterceptTermSelected(termId) {
         const termObj = this.#getKeywordInterceptTerm(termId);
@@ -442,41 +443,60 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
+     * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
+     */
+    acknowledgeAdded() {
+        if (this.lastSelectedATL !== undefined) {
+            this.#triggerReportAdEvent(
+                this.lastSelectedATL,
+                this.#ReportedEventType.INTERACTION
+            );
+
+            this.lastSelectedATL = undefined;
+        }
+    }
+
+    /**
+     * Client must trigger this method when any items are added to the cart by the user for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} cartId - The ID of the cart the items were placed within.
+     */
+    reportItemsAddedToCart(itemNames, cartId) {
+        this.#reportItemsAddedToListOrCart(itemNames, cartId);
+    }
+
+    /**
+     * Client must trigger this method when any items are deleted from the cart by the user for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} cartId - The ID of the cart the items were placed within.
+     */
+    reportItemsDeletedFromCart(itemNames, cartId) {
+        this.#reportItemsDeletedFromListOrCart(itemNames, cartId);
+    }
+
+    /**
      * Client must trigger this method when any items are added to a list for reports we provide to the client.
-     * @param itemNames - The items to report.
-     * @param listName - (optional) The list to associate the items with, if available.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} listName - (optional) The list to associate the items with, if available.
      */
     reportItemsAddedToList(itemNames, listName) {
-        const requestPayload = this.#getListManagerApiRequestData(
-            this.#ListManagerEventName.ADDED_TO_LIST,
-            itemNames,
-            listName
-        );
+        this.#reportItemsAddedToListOrCart(itemNames, listName);
+    }
 
-        this.#sendApiRequest({
-            method: "POST",
-            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
-            headers: [
-                {
-                    name: "accept",
-                    value: "application/json",
-                },
-            ],
-            requestPayload,
-            onError: () => {
-                console.error(
-                    `An error occurred while reporting an item "${
-                        this.#ListManagerEventName.ADDED_TO_LIST
-                    }" event.`
-                );
-            },
-        });
+    /**
+     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} listName - (optional) The list the items are associated with, if available.
+     */
+    reportItemsDeletedFromList(itemNames, listName) {
+        this.#reportItemsDeletedFromListOrCart(itemNames, listName);
     }
 
     /**
      * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
-     * @param itemNames - The items to report.
-     * @param listName - (optional) The list the items are associated with, if available.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} listName - (optional) The list the items are associated with, if available.
      */
     reportItemsCrossedOffList(itemNames, listName) {
         const requestPayload = this.#getListManagerApiRequestData(
@@ -506,42 +526,10 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
-     * @param itemNames - The items to report.
-     * @param listName - (optional) The list the items are associated with, if available.
-     */
-    reportItemsDeletedFromList(itemNames, listName) {
-        const requestPayload = this.#getListManagerApiRequestData(
-            this.#ListManagerEventName.DELETED_FROM_LIST,
-            itemNames,
-            listName
-        );
-
-        this.#sendApiRequest({
-            method: "POST",
-            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
-            headers: [
-                {
-                    name: "accept",
-                    value: "application/json",
-                },
-            ],
-            requestPayload,
-            onError: () => {
-                console.error(
-                    `An error occurred while reporting an item "${
-                        this.#ListManagerEventName.DELETED_FROM_LIST
-                    }" event.`
-                );
-            },
-        });
-    }
-
-    /**
      * Method that can be triggered when a deeplink or standard URL is recieved
      * by the app to see if there are any payloads to be processed from the URL.
      * NOTE: This method can/will be called by the client when necessary.
-     * @param url - The full deeplink or full standard URL.
+     * @param {string} url - The full deeplink or full standard URL.
      */
     decodePayloadDeepLink(url) {
         const searchStr = "data=";
@@ -582,7 +570,7 @@ class AdadaptedJsSdk {
     /**
      * Client must trigger this method after processing a payload into a user's list.
      * Enables reporting we provided to the client.
-     * @param payloadId - The payload ID that we want to acknowledge.
+     * @param {string} payloadId - The payload ID that we want to acknowledge.
      */
     markPayloadContentAcknowledged(payloadId) {}
 
@@ -590,7 +578,7 @@ class AdadaptedJsSdk {
      * Client must trigger this method when any payload items were rejected from being
      * added to a user's list. Enables reporting we provided to the client.
      * Example Usage: The item already exists in the users list.
-     * @param payloadId - The payload ID that we want to acknowledge.
+     * @param {string} payloadId - The payload ID that we want to acknowledge.
      */
     markPayloadContentRejected(payloadId) {}
 
@@ -741,7 +729,7 @@ class AdadaptedJsSdk {
 
     /**
      * Renders or updates the ad zone data.
-     * @param adZonesData - All ad zone data needed for the zones.
+     * @param {object} adZonesData - All ad zone data needed for the zones.
      */
     #renderAdZones(adZonesData) {
         if (
@@ -770,7 +758,7 @@ class AdadaptedJsSdk {
 
     /**
      * Creates all Ad Zone Info objects based on provided Ad Zones.
-     * @param adZonesData - The object of available zones.
+     * @param {object} adZonesData - The object of available zones.
      * @returns the array of Ad Zone Info objects.
      */
     #generateAdZones(adZonesData) {
@@ -805,8 +793,8 @@ class AdadaptedJsSdk {
 
     /**
      * Generates the current contents of an ad zone.
-     * @param adZoneData - The ad zone object.
-     * @param displayedAdIndex - The index of the ad unit in the ad zone.
+     * @param {object} adZoneData - The ad zone object.
+     * @param {number} displayedAdIndex - The index of the ad unit in the ad zone.
      * @returns the generated ad zone contents.
      */
     #generateAdZoneContents(adZoneData, displayedAdIndex) {
@@ -854,7 +842,7 @@ class AdadaptedJsSdk {
 
     /**
      * Generates the ad popover.
-     * @param currentAd - The ad to display within the popover.
+     * @param {object} currentAd - The ad to display within the popover.
      * @returns the generated ad popover.
      */
     #generateAdPopover(currentAd) {
@@ -1005,7 +993,7 @@ class AdadaptedJsSdk {
 
     /**
      * Triggers when the user selects the ad zone.
-     * @param adZoneData - The related ad zone data.
+     * @param {object} adZoneData - The related ad zone data.
      * @param displayedAdIndex - The currently displayed ad index for the ad zone.
      */
     #onAdZoneSelected(adZoneData, displayedAdIndex) {
@@ -1056,6 +1044,11 @@ class AdadaptedJsSdk {
                     },
                 };
             }
+
+            this.#triggerReportAdEvent(
+                currentAd,
+                this.#ReportedEventType.INTERACTION
+            );
         } else if (
             this.#getOperatingSystem() === this.#DeviceOS.DESKTOP &&
             (currentAd.action_type === this.#AdActionType.POPUP ||
@@ -1065,6 +1058,11 @@ class AdadaptedJsSdk {
         ) {
             // Only desktop.
             window.open(currentAd.action_path, "_blank");
+
+            this.#triggerReportAdEvent(
+                currentAd,
+                this.#ReportedEventType.INTERACTION
+            );
 
             // NOTE: Circulars will not work in their current state for desktop. Circulars will need
             // to be updated to send an event message up through the iframe and the ad popover will
@@ -1076,13 +1074,9 @@ class AdadaptedJsSdk {
             currentAd.payload &&
             currentAd.payload.detailed_list_items
         ) {
+            this.lastSelectedATL = { ...currentAd };
             this.onAddToListTriggered(currentAd.payload.detailed_list_items);
         }
-
-        this.#triggerReportAdEvent(
-            currentAd,
-            this.#ReportedEventType.INTERACTION
-        );
 
         if (this.cycleAdTimers[adZoneData.id]) {
             clearTimeout(this.cycleAdTimers[adZoneData.id]);
@@ -1092,9 +1086,73 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Client must trigger this method when any items are added to a list for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} listName - (optional) The list to associate the items with, if available.
+     */
+    #reportItemsAddedToListOrCart(itemNames, listName) {
+        const requestPayload = this.#getListManagerApiRequestData(
+            this.#ListManagerEventName.ADDED_TO_LIST,
+            itemNames,
+            listName
+        );
+
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload,
+            onError: () => {
+                console.error(
+                    `An error occurred while reporting an item "${
+                        this.#ListManagerEventName.ADDED_TO_LIST
+                    }" event.`
+                );
+            },
+        });
+    }
+
+    /**
+     * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} listName - (optional) The list the items are associated with, if available.
+     */
+    #reportItemsDeletedFromListOrCart(itemNames, listName) {
+        const requestPayload = this.#getListManagerApiRequestData(
+            this.#ListManagerEventName.DELETED_FROM_LIST,
+            itemNames,
+            listName
+        );
+
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload,
+            onError: () => {
+                console.error(
+                    `An error occurred while reporting an item "${
+                        this.#ListManagerEventName.DELETED_FROM_LIST
+                    }" event.`
+                );
+            },
+        });
+    }
+
+    /**
      * Triggered when we need to report an ad event to the API.
-     * @param currentAd - The ad to send an event for.
-     * @param eventType - The event type for the reported event.
+     * @param {object} currentAd - The ad to send an event for.
+     * @param {string} eventType - The event type for the reported event.
      */
     #triggerReportAdEvent(currentAd, eventType) {
         // The event timestamp has to be sent as a unix timestamp.
@@ -1134,7 +1192,7 @@ class AdadaptedJsSdk {
 
     /**
      * Performs all ad initialization tasks when a new ad is being displayed.
-     * @param adZoneData - The ad zone object.
+     * @param {object} adZoneData - The ad zone object.
      */
     #initializeAd(adZoneData) {
         const adZoneDisplayedAdIndex = parseInt(
@@ -1161,11 +1219,14 @@ class AdadaptedJsSdk {
 
     /**
      * Generates a new timer for cycling to the next ad.
-     * @param adZoneData - The ad zone object.
-     * @param displayedAdIndex - The currently displayed ad index for the ad zone.
-     * @param timerLength - The length(in milliseconds) of the timer.
+     * @param {object} adZoneData - The ad zone object.
+     * @param {number} displayedAdIndex - The currently displayed ad index for the ad zone.
+     * @param {number} timerLength - The length(in milliseconds) of the timer.
      */
     #createAdTimer(adZoneData, displayedAdIndex, timerLength) {
+        // This is need to ensure we do not stack up timers for the ad zone ad cycling.
+        clearTimeout(this.cycleAdTimers[adZoneData.id]);
+
         this.cycleAdTimers[adZoneData.id] = setTimeout(() => {
             this.#cycleDisplayedAd(adZoneData, displayedAdIndex);
         }, timerLength);
@@ -1206,8 +1267,8 @@ class AdadaptedJsSdk {
 
     /**
      * Updates the contents of the ad zone with the next ad.
-     * @param adZoneData - The ad zone data object.
-     * @param nextAdIndex - The ad index to display.
+     * @param {object} adZoneData - The ad zone data object.
+     * @param {number} nextAdIndex - The ad index to display.
      */
     #updateAdZoneContents(adZoneData, nextAdIndex) {
         const displayedAd = adZoneData.ads[nextAdIndex];
@@ -1264,7 +1325,7 @@ class AdadaptedJsSdk {
 
     /**
      * Gets the Keyword Intercept Term based on the provided term ID.
-     * @param termId - The term ID to get the term object for.
+     * @param {string} termId - The term ID to get the term object for.
      * @returns the term if it was found based on the provided term ID.
      */
     #getKeywordInterceptTerm(termId) {
@@ -1291,9 +1352,9 @@ class AdadaptedJsSdk {
 
     /**
      * Gets all data needed to make a List Manager API request.
-     * @param eventName - The event name.
-     * @param itemNames - The items to report.
-     * @param listName - (optional) The list associated to the items, if available.
+     * @param {string} eventName - The event name.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} listName - (optional) The list associated to the items, if available.
      * @returns the data required for the request.
      */
     #getListManagerApiRequestData(eventName, itemNames, listName) {
@@ -1343,7 +1404,7 @@ class AdadaptedJsSdk {
 
     /**
      * Counts the number of properties in an object.
-     * @param obj - The object to count the number of properties from.
+     * @param {object} obj - The object to count the number of properties from.
      * @returns the total count of properties from the provided object.
      */
     #totalProperties(obj) {

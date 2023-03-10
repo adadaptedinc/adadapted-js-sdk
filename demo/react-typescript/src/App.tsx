@@ -342,7 +342,7 @@ export const App: FC = (): ReactElement => {
      * @param idx - The index of the item in the cart.
      */
     const removeItemFromCart = (idx: number) => {
-        jsSdk.reportItemsDeletedFromList([userCartItems[idx].name], "Cart");
+        jsSdk.reportItemsDeletedFromCart([userCartItems[idx].name], "Cart");
 
         setUserCartItems((prevUserCartItems) => {
             let updatedUserCartItems = [...prevUserCartItems];
@@ -363,7 +363,7 @@ export const App: FC = (): ReactElement => {
             itemNames.push(cartItem.name);
         }
 
-        jsSdk.reportItemsDeletedFromList(itemNames, "Cart");
+        jsSdk.reportItemsDeletedFromCart(itemNames, "Cart");
 
         setUserCartItems([]);
     };
@@ -410,6 +410,7 @@ export const App: FC = (): ReactElement => {
             }
 
             if (itemNameReportList.length) {
+                jsSdk.acknowledgeAdded();
                 jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
             }
 
@@ -458,7 +459,8 @@ export const App: FC = (): ReactElement => {
             }
 
             if (itemNameReportList.length) {
-                jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping Cart");
+                jsSdk.acknowledgeAdded();
+                jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
             }
 
             return finalCartItems;

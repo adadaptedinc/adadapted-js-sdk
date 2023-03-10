@@ -16,6 +16,7 @@ declare class AdadaptedJsSdk {
     sessionId: any;
     sessionInfo: any;
     adZones: any;
+    lastSelectedATL: any;
     refreshAdZonesTimer: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
@@ -80,23 +81,40 @@ declare class AdadaptedJsSdk {
      */
     reportKeywordInterceptTermsPresented(termIds: string[]): void;
     /**
+     * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
+     * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
+     */
+    acknowledgeAdded(): void;
+    /**
+     * Client must trigger this method when any items are added to the cart by the user for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} cartId - The ID of the cart the items were placed within.
+     */
+    reportItemsAddedToCart(itemNames: string[], listName: string): void;
+    /**
+     * Client must trigger this method when any items are deleted from the cart by the user for reports we provide to the client.
+     * @param {string[]} itemNames - The items to report.
+     * @param {string} cartId - The ID of the cart the items were placed within.
+     */
+    reportItemsDeletedFromCart(itemNames: string[], listName: string): void;
+    /**
      * Client must trigger this method when any items are added to a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list to associate the items with, if available.
      */
     reportItemsAddedToList(itemNames: string[], listName: string): void;
     /**
-     * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
-     * @param itemNames - The items to report.
-     * @param listName - (optional) The list the items are associated with, if available.
-     */
-    reportItemsCrossedOffList(itemNames: string[], listName: string): void;
-    /**
      * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
     reportItemsDeletedFromList(itemNames: string[], listName: string): void;
+    /**
+     * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
+     * @param itemNames - The items to report.
+     * @param listName - (optional) The list the items are associated with, if available.
+     */
+    reportItemsCrossedOffList(itemNames: string[], listName: string): void;
     /**
      * Method that can be triggered when a deeplink or standard URL is recieved
      * by the app to see if there are any payloads to be processed from the URL.
