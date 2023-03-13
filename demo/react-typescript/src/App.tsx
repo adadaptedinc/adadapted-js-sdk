@@ -209,39 +209,39 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
  * @returns the App component.
  */
 export const App: FC = (): ReactElement => {
-    const sdkAppDetails: SdkDetails = {
-        apiEnv: "dev",
-        apiKey: "7D58810X6333241C",
-        zonePlacements: [
-            {
-                zoneId: "102110",
-                width: 320,
-                height: 100,
-            },
-        ],
-    };
-
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "dev",
-    //     apiKey: "NTGXMTA3ZWJJYWZL", // BigOven - Android
+    //     apiKey: "7D58810X6333241C",
     //     zonePlacements: [
     //         {
-    //             zoneId: "100862",
+    //             zoneId: "102110",
     //             width: 320,
-    //             height: 210,
-    //         },
-    //         {
-    //             zoneId: "100863",
-    //             width: 160,
-    //             height: 300,
-    //         },
-    //         {
-    //             zoneId: "100864",
-    //             width: 320,
-    //             height: 90,
+    //             height: 100,
     //         },
     //     ],
     // };
+
+    const sdkAppDetails: SdkDetails = {
+        apiEnv: "dev",
+        apiKey: "NJIXNMRHZDC5ODCY",
+        zonePlacements: [
+            {
+                zoneId: "102004",
+                width: 640,
+                height: 200,
+            },
+            {
+                zoneId: "101991",
+                width: 640,
+                height: 200,
+            },
+            {
+                zoneId: "101990",
+                width: 1200,
+                height: 627,
+            },
+        ],
+    };
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "prod",

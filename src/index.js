@@ -28,6 +28,8 @@ class AdadaptedJsSdk {
         this.keywordInterceptSearchValue = "";
         this.cycleAdTimers = {};
         this.initialBodyOverflowStyle = document.body.style.overflow;
+        this.scrollEventAbortController = undefined;
+        this.adZoneCurrentAdImpressionTracker = {};
 
         /**
          * Triggered when the ad zone has refreshed.
@@ -741,6 +743,24 @@ class AdadaptedJsSdk {
             // entries, so we can now generate the ad zones.
             this.adZones = this.#generateAdZones(adZonesData);
 
+            // Abort the existing listener if one exists for this specific method.
+            if (this.scrollEventAbortController) {
+                this.scrollEventAbortController.abort();
+            }
+
+            this.scrollEventAbortController = new AbortController();
+
+            // Add the scroll event that checks if the ad zone is within view.
+            document.addEventListener(
+                "scroll",
+                () => {
+                    this.#onDocumentScroll(this.adZones);
+                },
+                {
+                    signal: this.scrollEventAbortController.signal,
+                }
+            );
+
             for (const adZone of this.adZones) {
                 const zonePlacementId = this.zonePlacements[adZone.zoneId];
                 const containerElement =
@@ -789,6 +809,87 @@ class AdadaptedJsSdk {
         }
 
         return adZoneInfoList;
+    }
+
+    /**
+     * Triggered when the document is scrolled to check if the ada zone is in view.
+     * @param {object[]} adZones - The ad zones to iterate to check if they are currently in view.
+     */
+    #onDocumentScroll(adZones) {
+        for (const adZone of adZones) {
+            const zonePlacementId = this.zonePlacements[adZone.zoneId];
+            const containerElement = document.getElementById(zonePlacementId);
+            const adZoneDisplayedAdIndex = parseInt(
+                containerElement
+                    .getElementsByClassName("AdZone")[0]
+                    .getAttribute("data-displayedAdIndex"),
+                10
+            );
+
+            if (
+                this.#isInViewport(containerElement) &&
+                !this.adZoneCurrentAdImpressionTracker[adZone.adZoneData.id]
+            ) {
+                this.#triggerReportAdEvent(
+                    adZone.adZoneData.ads[adZoneDisplayedAdIndex],
+                    this.#ReportedEventType.IMPRESSION
+                );
+
+                this.adZoneCurrentAdImpressionTracker[
+                    adZone.adZoneData.id
+                ] = true;
+            }
+        }
+    }
+
+    /**
+     * Checks the viewport to see if an element is within view based on a % visible threshold.
+     * @param {HTMLElement} element - The element to check if its withi the viewport.
+     * @returns true if the element is within view based on a % visible threshold.
+     */
+    #isInViewport(element) {
+        const visibleThreshold = 0.4;
+        const rect = element.getBoundingClientRect();
+
+        const dimension = {
+            x: rect.x,
+            y: rect.y,
+            w: rect.width,
+            h: rect.height,
+        };
+        const viewport = {
+            x: 0,
+            y: 0,
+            w: window.innerWidth,
+            h: window.innerHeight,
+        };
+        const elementSize = dimension.w * dimension.h;
+        const overlap = this.#intersection(dimension, viewport);
+
+        // Return true if the amount of the element displayed within the viewport is 40% or greater.
+        return overlap / elementSize >= visibleThreshold;
+    }
+
+    /**
+     * Determines the overlapping area between two rectangles.
+     * @param {*} area1 - The first rectangle to compare.
+     * @param {*} area2 - The second rectangle to compare.
+     * @returns the intersecting area that can be used to determine how much of an element is within the viewport.
+     */
+    #intersection(area1, area2) {
+        const x_overlap = Math.max(
+            0,
+            Math.min(area1.x + area1.w, area2.x + area2.w) -
+                Math.max(area1.x, area2.x)
+        );
+        const y_overlap = Math.max(
+            0,
+            Math.min(area1.y + area1.h, area2.y + area2.h) -
+                Math.max(area1.y, area2.y)
+        );
+        const overlapArea = x_overlap * y_overlap;
+
+        return overlapArea;
     }
 
     /**
@@ -1195,9 +1296,11 @@ class AdadaptedJsSdk {
      * @param {object} adZoneData - The ad zone object.
      */
     #initializeAd(adZoneData) {
+        const adZoneElement = document.getElementById(
+            this.zonePlacements[adZoneData.id]
+        );
         const adZoneDisplayedAdIndex = parseInt(
-            document
-                .getElementById(this.zonePlacements[adZoneData.id])
+            adZoneElement
                 .getElementsByClassName("AdZone")[0]
                 .getAttribute("data-displayedAdIndex"),
             10
@@ -1210,11 +1313,17 @@ class AdadaptedJsSdk {
             adZoneData.ads[adZoneDisplayedAdIndex].refresh_time * 1000
         );
 
-        // Trigger an impression event for the ad.
-        this.#triggerReportAdEvent(
-            adZoneData.ads[adZoneDisplayedAdIndex],
-            this.#ReportedEventType.IMPRESSION
-        );
+        // Check if we need to trigger an impression event for the ad.
+        this.adZoneCurrentAdImpressionTracker[adZoneData.id] = false;
+
+        if (this.#isInViewport(adZoneElement)) {
+            this.#triggerReportAdEvent(
+                adZoneData.ads[adZoneDisplayedAdIndex],
+                this.#ReportedEventType.IMPRESSION
+            );
+
+            this.adZoneCurrentAdImpressionTracker[adZoneData.id] = true;
+        }
     }
 
     /**
@@ -1252,6 +1361,15 @@ class AdadaptedJsSdk {
                 nextAdIndex = displayedAdIndex + 1;
             }
 
+            // If no impression was ever recorded due to the ad zone never being scrolled into the viewport.
+            // Track a "non-visible" impression at this point before cycling the displayed ad.
+            if (!this.adZoneCurrentAdImpressionTracker[adZoneData.id]) {
+                this.#triggerReportAdEvent(
+                    adZoneData.ads[displayedAdIndex],
+                    this.#ReportedEventType.INVISIBLE_IMPRESSION
+                );
+            }
+
             this.#updateAdZoneContents(adZoneData, nextAdIndex);
         } else {
             // Create a new timer with a timer length of just 10 seconds.
@@ -1271,8 +1389,6 @@ class AdadaptedJsSdk {
      * @param {number} nextAdIndex - The ad index to display.
      */
     #updateAdZoneContents(adZoneData, nextAdIndex) {
-        const displayedAd = adZoneData.ads[nextAdIndex];
-
         const adZoneContainer = this.#generateAdZoneContents(
             adZoneData,
             nextAdIndex
@@ -1626,6 +1742,10 @@ class AdadaptedJsSdk {
          * Occurs when an ad is displayed to the user.
          */
         IMPRESSION: "impression",
+        /**
+         * Occurs when an ad is not displayed to the user prior to cycling to the next displayable ad.
+         */
+        INVISIBLE_IMPRESSION: "invisible_impression",
         /**
          * Occurs when the user interacts with an ad.
          */

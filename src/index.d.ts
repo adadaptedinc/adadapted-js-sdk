@@ -22,6 +22,7 @@ declare class AdadaptedJsSdk {
     keywordInterceptSearchValue: string;
     cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
+    scrollEventAbortController: any;
     onAdZonesRefreshed: () => void;
     onAddToListTriggered: () => void;
     onPayloadsAvailable: () => void;
