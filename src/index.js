@@ -38,9 +38,9 @@ class AdadaptedJsSdk {
             // Defaulting to empty method.
         };
         /**
-         * Triggered when the add-to-list action has occurred.
+         * Triggered when the add-to-list / add-to-cart action has occurred.
          */
-        this.onAddToListTriggered = () => {
+        this.onAddItemsTriggered = () => {
             // Defaulting to empty method.
         };
         /**
@@ -107,10 +107,14 @@ class AdadaptedJsSdk {
                 this.advertiserId = props.advertiserId;
 
                 // Set the bundle ID (default value used if not provided).
-                this.bundleId = props.bundleId;
+                if (props.bundleId) {
+                    this.bundleId = props.bundleId;
+                }
 
                 // Set the bundle version (default value used if not provided).
-                this.bundleVersion = props.bundleVersion;
+                if (props.bundleVersion) {
+                    this.bundleVersion = props.bundleVersion;
+                }
 
                 // Set whether the user is allowed to be retargetted by ads.
                 this.allowRetargeting = props.allowRetargeting;
@@ -140,10 +144,10 @@ class AdadaptedJsSdk {
                     this.onAdZonesRefreshed = props.onAdZonesRefreshed;
                 }
 
-                // If the callback for onAddToListTriggered was provided, set it
+                // If the callback for onAddItemsTriggered was provided, set it
                 // globally for use when the method needs to be triggered.
-                if (props.onAddToListTriggered) {
-                    this.onAddToListTriggered = props.onAddToListTriggered;
+                if (props.onAddItemsTriggered) {
+                    this.onAddItemsTriggered = props.onAddItemsTriggered;
                 }
 
                 // If the callback for onPayloadsAvailable was provided, set it
@@ -168,9 +172,6 @@ class AdadaptedJsSdk {
 
     /**
      * Requests all available Payload server item data for the user.
-     *
-     * NOTE: If there are payload items available, the onPayloadsAvailable() callback
-     * will be triggered and the items will be provided through that method.
      */
     requestPayloadItemData() {
         this.#sendApiRequest({
@@ -465,7 +466,11 @@ class AdadaptedJsSdk {
      * @param {string} cartId - The ID of the cart the items were placed within.
      */
     reportItemsAddedToCart(itemNames, cartId) {
-        this.#reportItemsAddedToListOrCart(itemNames, cartId);
+        this.#reportItemsAddedToListOrCart(
+            this.#ListManagerType.CART,
+            itemNames,
+            cartId
+        );
     }
 
     /**
@@ -474,7 +479,11 @@ class AdadaptedJsSdk {
      * @param {string} cartId - The ID of the cart the items were placed within.
      */
     reportItemsDeletedFromCart(itemNames, cartId) {
-        this.#reportItemsDeletedFromListOrCart(itemNames, cartId);
+        this.#reportItemsDeletedFromListOrCart(
+            this.#ListManagerType.CART,
+            itemNames,
+            cartId
+        );
     }
 
     /**
@@ -483,7 +492,11 @@ class AdadaptedJsSdk {
      * @param {string} listName - (optional) The list to associate the items with, if available.
      */
     reportItemsAddedToList(itemNames, listName) {
-        this.#reportItemsAddedToListOrCart(itemNames, listName);
+        this.#reportItemsAddedToListOrCart(
+            this.#ListManagerType.LIST,
+            itemNames,
+            listName
+        );
     }
 
     /**
@@ -492,7 +505,11 @@ class AdadaptedJsSdk {
      * @param {string} listName - (optional) The list the items are associated with, if available.
      */
     reportItemsDeletedFromList(itemNames, listName) {
-        this.#reportItemsDeletedFromListOrCart(itemNames, listName);
+        this.#reportItemsDeletedFromListOrCart(
+            this.#ListManagerType.LIST,
+            itemNames,
+            listName
+        );
     }
 
     /**
@@ -525,48 +542,6 @@ class AdadaptedJsSdk {
                 );
             },
         });
-    }
-
-    /**
-     * Method that can be triggered when a deeplink or standard URL is recieved
-     * by the app to see if there are any payloads to be processed from the URL.
-     * NOTE: This method can/will be called by the client when necessary.
-     * @param {string} url - The full deeplink or full standard URL.
-     */
-    decodePayloadDeepLink(url) {
-        const searchStr = "data=";
-        const dataIndex = url.indexOf(searchStr);
-
-        if (dataIndex !== -1) {
-            const encodedData = url.substr(dataIndex + searchStr.length);
-            const payloadData = JSON.parse(atob(encodedData));
-            const payloadId = payloadData["payload_id"];
-            const itemDataList = payloadData["detailed_list_items"];
-
-            if (itemDataList && itemDataList.length > 0) {
-                const finalItemList = [];
-
-                for (const itemData of itemDataList) {
-                    finalItemList.push({
-                        payload_id: payloadId,
-                        detailed_list_items: [
-                            {
-                                product_title: itemData["product_title"],
-                                product_brand: itemData["product_brand"],
-                                product_category: itemData["product_category"],
-                                product_barcode: itemData["product_barcode"],
-                                product_discount: itemData["product_discount"],
-                                product_image: itemData["product_image"],
-                                product_sku: itemData["product_sku"],
-                            },
-                        ],
-                    });
-                }
-
-                // Send the items to the client, so they can add them to the list.
-                this.onPayloadsAvailable(finalItemList);
-            }
-        }
     }
 
     /**
@@ -603,36 +578,31 @@ class AdadaptedJsSdk {
      */
     #initializeSession() {
         return new Promise((resolve, reject) => {
-            this.#sendApiRequest({
-                method: "POST",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
-                headers: [
-                    {
-                        name: "accept",
-                        value: "*/*",
-                    },
-                    {
-                        name: "Content-Type",
-                        value: "application/json",
-                    },
-                ],
-                requestPayload: {
-                    app_id: this.apiKey,
-                    udid: this.advertiserId,
-                    device_udid: this.advertiserId,
-                    sdk_version: packageJson.version,
-                    device_os: this.deviceOs,
-                    bundle_id: this.bundleId,
-                    bundle_version: this.bundleVersion,
-                    allow_retargeting: this.allowRetargeting,
-                    created_at: Math.floor(new Date().getTime() / 1000),
-                },
-                onSuccess: (response) => {
-                    this.sessionId = response.session_id;
-                    this.sessionInfo = response;
+            this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
+                let createNewSession = true;
+                const existingSession = localStorage.getItem(
+                    `aa-session-${hashedApiKey}`
+                );
+                let parsedExistingSession;
+
+                if (existingSession) {
+                    parsedExistingSession = JSON.parse(atob(existingSession));
+
+                    if (
+                        this.#calculateRemainingSessionTimeUntilExpiration(
+                            parsedExistingSession.session_expires_at
+                        ) > 0
+                    ) {
+                        createNewSession = false;
+                    }
+                }
+
+                if (!createNewSession) {
+                    this.sessionId = parsedExistingSession.session_id;
+                    this.sessionInfo = parsedExistingSession;
 
                     // Render the Ad Zones.
-                    this.#renderAdZones(response.zones);
+                    this.#renderAdZones(parsedExistingSession.zones);
 
                     // Start the session refresh timer.
                     this.#createSessionRefreshTimer();
@@ -650,11 +620,87 @@ class AdadaptedJsSdk {
                     this.requestPayloadItemData();
 
                     resolve();
-                },
-                onError: () => {
-                    reject("An error occurred initializing the SDK.");
-                },
+                } else {
+                    this.#sendApiRequest({
+                        method: "POST",
+                        url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
+                        headers: [
+                            {
+                                name: "accept",
+                                value: "*/*",
+                            },
+                            {
+                                name: "Content-Type",
+                                value: "application/json",
+                            },
+                        ],
+                        requestPayload: {
+                            app_id: this.apiKey,
+                            udid: this.advertiserId,
+                            device_udid: this.advertiserId,
+                            sdk_version: packageJson.version,
+                            device_os: this.deviceOs,
+                            bundle_id: this.bundleId,
+                            bundle_version: this.bundleVersion,
+                            allow_retargeting: this.allowRetargeting,
+                            created_at: Math.floor(new Date().getTime() / 1000),
+                        },
+                        onSuccess: (response) => {
+                            localStorage.setItem(
+                                `aa-session-${hashedApiKey}`,
+                                btoa(JSON.stringify(response))
+                            );
+
+                            this.sessionId = response.session_id;
+                            this.sessionInfo = response;
+
+                            // Render the Ad Zones.
+                            this.#renderAdZones(response.zones);
+
+                            // Start the session refresh timer.
+                            this.#createSessionRefreshTimer();
+
+                            // Start the ad zone data refresh timer.
+                            this.#createRefreshAdZonesTimer();
+
+                            // Get all possible keyword intercept values.
+                            // We don't need to wait for this to complete
+                            // prior to resolving initialization of the SDK.
+                            this.#getKeywordIntercepts();
+
+                            // Make the initial call to the Payload data server to see if
+                            // the user has any outstanding items to be added to list.
+                            this.requestPayloadItemData();
+
+                            resolve();
+                        },
+                        onError: () => {
+                            reject("An error occurred initializing the SDK.");
+                        },
+                    });
+                }
             });
+        });
+    }
+
+    /**
+     * Takes a value and hashes it as SHA-256.
+     * @param {*} value - The value to hash.
+     * @returns the hashed value.
+     */
+    #getHashSHA256(value) {
+        return new Promise((resolve) => {
+            const utf8 = new TextEncoder().encode(value);
+            const hashedValue = crypto.subtle
+                .digest("SHA-256", utf8)
+                .then((hashBuffer) => {
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray
+                        .map((bytes) => bytes.toString(16).padStart(2, "0"))
+                        .join("");
+
+                    resolve(hashHex);
+                });
         });
     }
 
@@ -696,38 +742,102 @@ class AdadaptedJsSdk {
                 : 300000;
 
         this.refreshAdZonesTimer = setTimeout(() => {
-            this.#sendApiRequest({
-                method: "GET",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
-                headers: [
-                    {
-                        name: "accept",
-                        value: "application/json",
+            // Need to check if a session timeout has occurred first so
+            // we don't try to refresh the ads with an invalid session.
+            if (
+                this.#calculateRemainingSessionTimeUntilExpiration(
+                    this.sessionInfo.session_expires_at
+                ) <= 0
+            ) {
+                // Refresh the session instead of just refreshing ads.
+                this.#initializeSession()
+                    .then(() => {
+                        resolve();
+                    })
+                    .catch((errorMessage) => {
+                        reject(errorMessage);
+                    });
+            } else {
+                // We have a valid session still, so just refresh the ads.
+                this.#sendApiRequest({
+                    method: "GET",
+                    url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
+                    headers: [
+                        {
+                            name: "accept",
+                            value: "application/json",
+                        },
+                    ],
+                    onSuccess: (response) => {
+                        this.sessionInfo = response;
+
+                        // Render the Ad Zones.
+                        this.#renderAdZones(response.zones);
+
+                        // Call the user defined callback indicating
+                        // the session data has been refreshed.
+                        this.onAdZonesRefreshed();
+
+                        // Start the timer again based on the new session data.
+                        this.#createRefreshAdZonesTimer();
                     },
-                ],
-                onSuccess: (response) => {
-                    this.sessionInfo = response;
+                    onError: () => {
+                        console.error(
+                            "An error occurred refreshing the ad zones."
+                        );
 
-                    // Render the Ad Zones.
-                    this.#renderAdZones(response.zones);
-
-                    // Call the user defined callback indicating
-                    // the session data has been refreshed.
-                    this.onAdZonesRefreshed();
-
-                    // Start the timer again based on the new session data.
-                    this.#createRefreshAdZonesTimer();
-                },
-                onError: () => {
-                    console.error("An error occurred refreshing the ad zones.");
-
-                    // Start the timer again so we can make another
-                    // attempt to refresh the session data.
-                    this.#createRefreshAdZonesTimer();
-                },
-            });
+                        // Start the timer again so we can make another
+                        // attempt to refresh the session data.
+                        this.#createRefreshAdZonesTimer();
+                    },
+                });
+            }
         }, timerMs);
     }
+
+    /**
+     * NOTE: There is currently no need for deeplinking support for this SDK.
+     *
+     * Method that can be triggered when a deeplink or standard URL is recieved
+     * by the app to see if there are any payloads to be processed from the URL.
+     * NOTE: This method can/will be called by the client when necessary.
+     * @param {string} url - The full deeplink or full standard URL.
+     */
+    // #decodePayloadDeepLink(url) {
+    //     const searchStr = "data=";
+    //     const dataIndex = url.indexOf(searchStr);
+
+    //     if (dataIndex !== -1) {
+    //         const encodedData = url.substr(dataIndex + searchStr.length);
+    //         const payloadData = JSON.parse(atob(encodedData));
+    //         const payloadId = payloadData["payload_id"];
+    //         const itemDataList = payloadData["detailed_list_items"];
+
+    //         if (itemDataList && itemDataList.length > 0) {
+    //             const detailedItemList = [];
+
+    //             for (const itemData of itemDataList) {
+    //                 detailedItemList.push({
+    //                     product_title: itemData["product_title"],
+    //                     product_brand: itemData["product_brand"],
+    //                     product_category: itemData["product_category"],
+    //                     product_barcode: itemData["product_barcode"],
+    //                     product_discount: itemData["product_discount"],
+    //                     product_image: itemData["product_image"],
+    //                     product_sku: itemData["product_sku"],
+    //                 });
+    //             }
+
+    //             // Send the items to the client, so they can add them to the list.
+    //             this.onPayloadsAvailable([
+    //                 {
+    //                     payload_id: payload.payload_id,
+    //                     detailed_list_items: detailedItemList,
+    //                 },
+    //             ]);
+    //         }
+    //     }
+    // }
 
     /**
      * Renders or updates the ad zone data.
@@ -1176,7 +1286,7 @@ class AdadaptedJsSdk {
             currentAd.payload.detailed_list_items
         ) {
             this.lastSelectedATL = { ...currentAd };
-            this.onAddToListTriggered(currentAd.payload.detailed_list_items);
+            this.onAddItemsTriggered(currentAd.payload.detailed_list_items);
         }
 
         if (this.cycleAdTimers[adZoneData.id]) {
@@ -1188,12 +1298,18 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are added to a list for reports we provide to the client.
+     * @param {string} type - List or cart.
      * @param {string[]} itemNames - The items to report.
      * @param {string} listName - (optional) The list to associate the items with, if available.
      */
-    #reportItemsAddedToListOrCart(itemNames, listName) {
+    #reportItemsAddedToListOrCart(type, itemNames, listName) {
+        const reportedEventType =
+            type === this.#ListManagerType.CART
+                ? this.#ListManagerEventName.ADDED_TO_CART
+                : this.#ListManagerEventName.ADDED_TO_LIST;
+
         const requestPayload = this.#getListManagerApiRequestData(
-            this.#ListManagerEventName.ADDED_TO_LIST,
+            reportedEventType,
             itemNames,
             listName
         );
@@ -1210,9 +1326,7 @@ class AdadaptedJsSdk {
             requestPayload,
             onError: () => {
                 console.error(
-                    `An error occurred while reporting an item "${
-                        this.#ListManagerEventName.ADDED_TO_LIST
-                    }" event.`
+                    `An error occurred while reporting an item "${reportedEventType}" event.`
                 );
             },
         });
@@ -1220,12 +1334,18 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * @param {string} type - List or cart.
      * @param {string[]} itemNames - The items to report.
      * @param {string} listName - (optional) The list the items are associated with, if available.
      */
-    #reportItemsDeletedFromListOrCart(itemNames, listName) {
+    #reportItemsDeletedFromListOrCart(type, itemNames, listName) {
+        const reportedEventType =
+            type === this.#ListManagerType.CART
+                ? this.#ListManagerEventName.ADDED_TO_CART
+                : this.#ListManagerEventName.ADDED_TO_LIST;
+
         const requestPayload = this.#getListManagerApiRequestData(
-            this.#ListManagerEventName.DELETED_FROM_LIST,
+            reportedEventType,
             itemNames,
             listName
         );
@@ -1242,9 +1362,7 @@ class AdadaptedJsSdk {
             requestPayload,
             onError: () => {
                 console.error(
-                    `An error occurred while reporting an item "${
-                        this.#ListManagerEventName.DELETED_FROM_LIST
-                    }" event.`
+                    `An error occurred while reporting an item "${reportedEventType}" event.`
                 );
             },
         });
@@ -1467,6 +1585,24 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Calculates the remaining session time until expiration.
+     * @param expireSeconds - The session expiration in seconds.
+     * @returns the amount of time in milliseconds until the session expires.
+     */
+    #calculateRemainingSessionTimeUntilExpiration(expireSeconds) {
+        const expiration = new Date(0); // 0 sets the date to the epoch to start off
+        expiration.setUTCSeconds(expireSeconds);
+
+        const currentTimeMilliseconds = new Date().getTime();
+        const expirationTimeMilliseconds = expiration.getTime();
+        const totalMillisecondsUntilExpire =
+            expirationTimeMilliseconds - currentTimeMilliseconds;
+
+        // Return the amount of time until expiration minus 1 minute.
+        return totalMillisecondsUntilExpire - 60000;
+    }
+
+    /**
      * Gets all data needed to make a List Manager API request.
      * @param {string} eventName - The event name.
      * @param {string[]} itemNames - The items to report.
@@ -1627,6 +1763,20 @@ class AdadaptedJsSdk {
                 : undefined
         );
     }
+
+    /**
+     * Enum representing possible List Manager types.
+     */
+    #ListManagerType = {
+        /**
+         * List.
+         */
+        LIST: "list",
+        /**
+         * Cart.
+         */
+        CART: "cart",
+    };
 
     /**
      * Enum representing possible device operating systems.
@@ -1799,6 +1949,14 @@ class AdadaptedJsSdk {
          * The user deleted an item from their list.
          */
         DELETED_FROM_LIST: "user_deleted_from_list",
+        /**
+         * The user added an item to their cart.
+         */
+        ADDED_TO_CART: "user_added_to_cart",
+        /**
+         * The user deleted an item from their cart.
+         */
+        DELETED_FROM_CART: "user_deleted_from_cart",
     };
 }
 

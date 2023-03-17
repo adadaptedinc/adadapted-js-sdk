@@ -517,11 +517,9 @@ export const App: FC = (): ReactElement => {
                 apiKey: sdkAppDetails.apiKey,
                 advertiserId: "JS_SDK_TEST_USER_UDID",
                 allowRetargeting: true,
-                bundleId: "JS_SDK_TEST_APP",
-                bundleVersion: "1.0.0",
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
-                onAddToListTriggered: (items) => {
+                onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
                 },
                 onPayloadsAvailable: (payloads) => {
@@ -543,9 +541,6 @@ export const App: FC = (): ReactElement => {
                     console.log("Available Keyword Intercepts:", availableKeywordIntercepts);
 
                     setAvailableKeywordIntercepts(availableKeywordIntercepts);
-
-                    // Check if we need to handle a deeplink.
-                    jsSdk.decodePayloadDeepLink(window.location.href);
                 }, 2000);
             })
             .catch((err) => {

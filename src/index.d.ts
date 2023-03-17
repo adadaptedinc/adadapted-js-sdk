@@ -24,7 +24,7 @@ declare class AdadaptedJsSdk {
     initialBodyOverflowStyle: string;
     scrollEventAbortController: any;
     onAdZonesRefreshed: () => void;
-    onAddToListTriggered: () => void;
+    onAddItemsTriggered: () => void;
     onPayloadsAvailable: () => void;
     /**
      * Gets the current session ID.
@@ -117,13 +117,6 @@ declare class AdadaptedJsSdk {
      */
     reportItemsCrossedOffList(itemNames: string[], listName: string): void;
     /**
-     * Method that can be triggered when a deeplink or standard URL is recieved
-     * by the app to see if there are any payloads to be processed from the URL.
-     * NOTE: This method can/will be called by the client when necessary.
-     * @param url - The full deeplink or full standard URL.
-     */
-    decodePayloadDeepLink(url: string): AdadaptedJsSdk.Payload[];
-    /**
      * Client must trigger this method after processing a payload into a user's list.
      * Enables reporting we provided to the client.
      * @param payloadId - The payload ID that we want to acknowledge.
@@ -159,17 +152,17 @@ declare namespace AdadaptedJsSdk {
          */
         advertiserId: string;
         /**
-         * The unique bundle ID used to identify the user.
-         */
-        bundleId: string;
-        /**
-         * The unique bundle version used to identify the user.
-         */
-        bundleVersion: string;
-        /**
          * Allow ad retargeting.
          */
         allowRetargeting: boolean;
+        /**
+         * The unique bundle ID used to identify the user.
+         */
+        bundleId?: string;
+        /**
+         * The unique bundle version used to identify the user.
+         */
+        bundleVersion?: string;
         /**
          * A map of {Zone ID -> Element ID}. This map must be provided
          * in order to see ad zones displayed. If the client is only using
@@ -196,12 +189,12 @@ declare namespace AdadaptedJsSdk {
          */
         onAdZonesRefreshed?(): void;
         /**
-         * Callback that gets triggered when an "add to list" item/items are clicked.
-         * @param items - The array of items to "add to list".
+         * Callback that gets triggered when "add to list" or "add to cart" item/items are clicked.
+         * @param items - The array of items to add.
          */
-        onAddToListTriggered?(items: DetailedListItem[]): void;
+        onAddItemsTriggered?(items: DetailedListItem[]): void;
         /**
-         * Callback that gets triggered when user "add to list" payloads have been retrieved.
+         * Callback that gets triggered when user's "add to list" payloads have been retrieved.
          * @param payloads - All payloads the client must go through.
          */
         onPayloadsAvailable?(payloads: Payload[]): void;
