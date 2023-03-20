@@ -545,19 +545,48 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Client must trigger this method after processing a payload into a user's list.
-     * Enables reporting we provided to the client.
-     * @param {string} payloadId - The payload ID that we want to acknowledge.
+     * This method should be triggered when payloads have been delivered or rejected.
+     * This method accepts a list of payloads to enable performing this action as a batch operation if desired.
+     * @param {Array} payloadStatusList - The list of payload status objects to submit.
      */
-    markPayloadContentAcknowledged(payloadId) {}
+    updatePayloadStatus(payloadStatusList) {
+        // The event timestamp has to be sent as a unix timestamp.
+        const currentTsMilliseconds = new Date().getTime();
+        const finalPayloadStatusList = [];
 
-    /**
-     * Client must trigger this method when any payload items were rejected from being
-     * added to a user's list. Enables reporting we provided to the client.
-     * Example Usage: The item already exists in the users list.
-     * @param {string} payloadId - The payload ID that we want to acknowledge.
-     */
-    markPayloadContentRejected(payloadId) {}
+        for (const payloadStatus of payloadStatusList) {
+            finalPayloadStatusList.push({
+                ...payloadStatus,
+                event_timestamp: currentTsMilliseconds,
+            });
+        }
+
+        // Log the taken action/event with the API.
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.payloadApiEnv}/v/1/tracking`,
+            headers: [
+                {
+                    name: "Content-Type",
+                    value: "application/json",
+                },
+            ],
+            requestPayload: {
+                os: window.navigator.userAgent,
+                bundle_id: this.bundleId,
+                bundle_version: this.bundleVersion,
+                sdk_version: packageJson.version,
+                udid: this.advertiserId,
+                app_id: this.apiKey,
+                tracking: finalPayloadStatusList,
+            },
+            onError: () => {
+                console.error(
+                    "An error occurred while updating payload status."
+                );
+            },
+        });
+    }
 
     /**
      * Performs all clean up tasks for the SDK. Call this method when you are
@@ -1205,7 +1234,7 @@ class AdadaptedJsSdk {
     /**
      * Triggers when the user selects the ad zone.
      * @param {object} adZoneData - The related ad zone data.
-     * @param displayedAdIndex - The currently displayed ad index for the ad zone.
+     * @param {number} displayedAdIndex - The currently displayed ad index for the ad zone.
      */
     #onAdZoneSelected(adZoneData, displayedAdIndex) {
         const currentAd = adZoneData.ads[displayedAdIndex];
@@ -1461,8 +1490,8 @@ class AdadaptedJsSdk {
 
     /**
      * Cycles to the next ad to display in the current available sequence of ads for an ad zone.
-     * @param adZoneData - The ad zone object.
-     * @param displayedAdIndex - The currently displayed ad index for the ad zone.
+     * @param {object} adZoneData - The ad zone object.
+     * @param {number} displayedAdIndex - The currently displayed ad index for the ad zone.
      */
     #cycleDisplayedAd(adZoneData, displayedAdIndex) {
         const adContentsPopoverContainer = document.getElementById(
@@ -1586,7 +1615,7 @@ class AdadaptedJsSdk {
 
     /**
      * Calculates the remaining session time until expiration.
-     * @param expireSeconds - The session expiration in seconds.
+     * @param {number} expireSeconds - The session expiration in seconds.
      * @returns the amount of time in milliseconds until the session expires.
      */
     #calculateRemainingSessionTimeUntilExpiration(expireSeconds) {
@@ -1743,9 +1772,8 @@ class AdadaptedJsSdk {
 
         /**
          * Method triggered upon request error.
-         * @param err - The error that occurred.
          */
-        xhr.onerror = (err) => {
+        xhr.onerror = () => {
             if (settings.onError) {
                 settings.onError();
             }

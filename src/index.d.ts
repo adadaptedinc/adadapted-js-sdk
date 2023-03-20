@@ -117,18 +117,13 @@ declare class AdadaptedJsSdk {
      */
     reportItemsCrossedOffList(itemNames: string[], listName: string): void;
     /**
-     * Client must trigger this method after processing a payload into a user's list.
-     * Enables reporting we provided to the client.
-     * @param payloadId - The payload ID that we want to acknowledge.
+     * This method should be triggered when payloads have been delivered or rejected.
+     * This method accepts a list of payloads to enable performing this action as a batch operation if desired.
+     * @param payloadStatusList - The list of payload status objects to submit.
      */
-    markPayloadContentAcknowledged(payloadId: string): void;
-    /**
-     * Client must trigger this method when any payload items were rejected from being
-     * added to a user's list. Enables reporting we provided to the client.
-     * Example Usage: The item already exists in the users list.
-     * @param payloadId - The payload ID that we want to acknowledge.
-     */
-    markPayloadContentRejected(payloadId: string): void;
+    updatePayloadStatus(
+        payloadStatusList: AdadaptedJsSdk.PayloadStatus[]
+    ): void;
     /**
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
@@ -408,6 +403,20 @@ declare namespace AdadaptedJsSdk {
          * The array of list items.
          */
         detailed_list_items: DetailedListItem[];
+    }
+
+    /**
+     * The definition of a payload status.
+     */
+    export interface PayloadStatus {
+        /**
+         * The payload ID.
+         */
+        payload_id: string;
+        /**
+         * The status being assigned to the payload.
+         */
+        status: "delivered" | "rejected";
     }
 
     /**
