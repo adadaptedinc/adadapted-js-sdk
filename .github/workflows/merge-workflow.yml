@@ -67,8 +67,6 @@ jobs:
               run: npm install
             - name: NPM Audit Fix
               run: npm audit fix
-            - name: Build Files
-              run: npm run build-prod
             - name: Get Access Token
               run: echo "//registry.npmjs.org/:_authToken=${{secrets.NPM_TOKEN}}" > .npmrc
             - name: Publish
