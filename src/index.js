@@ -192,24 +192,41 @@ class AdadaptedJsSdk {
                 const finalItemList = [];
 
                 for (const payload of response.payloads) {
-                    const detailedItemList = [];
+                    if (
+                        finalItemList.find(
+                            (item) => item.payload_id === payload.payload_id
+                        )
+                    ) {
+                        // The payload ID was already placed into the finalItemList array.
+                        // Mark this occurrance as a duplicate and skip adding it to finalItemList.
+                        this.#sendPayloadStatusUpdate([
+                            {
+                                payload_id: payload.payload_id,
+                                status: "duplicate",
+                                event_timestamp: new Date().getTime(),
+                            },
+                        ]);
+                    } else {
+                        // The payload ID was not found in finalItemList, so add it.
+                        const detailedItemList = [];
 
-                    for (const itemData of payload.detailed_list_items) {
-                        detailedItemList.push({
-                            product_title: itemData["product_title"],
-                            product_brand: itemData["product_brand"],
-                            product_category: itemData["product_category"],
-                            product_barcode: itemData["product_barcode"],
-                            product_discount: itemData["product_discount"],
-                            product_image: itemData["product_image"],
-                            product_sku: itemData["product_sku"],
+                        for (const itemData of payload.detailed_list_items) {
+                            detailedItemList.push({
+                                product_title: itemData["product_title"],
+                                product_brand: itemData["product_brand"],
+                                product_category: itemData["product_category"],
+                                product_barcode: itemData["product_barcode"],
+                                product_discount: itemData["product_discount"],
+                                product_image: itemData["product_image"],
+                                product_sku: itemData["product_sku"],
+                            });
+                        }
+
+                        finalItemList.push({
+                            payload_id: payload.payload_id,
+                            detailed_list_items: detailedItemList,
                         });
                     }
-
-                    finalItemList.push({
-                        payload_id: payload.payload_id,
-                        detailed_list_items: detailedItemList,
-                    });
                 }
 
                 // Send the items to the client, so they can add them to the list.
@@ -554,6 +571,7 @@ class AdadaptedJsSdk {
         const currentTsMilliseconds = new Date().getTime();
         const finalPayloadStatusList = [];
 
+        // Make sure each status update contains the current timestamp.
         for (const payloadStatus of payloadStatusList) {
             finalPayloadStatusList.push({
                 ...payloadStatus,
@@ -561,31 +579,7 @@ class AdadaptedJsSdk {
             });
         }
 
-        // Log the taken action/event with the API.
-        this.#sendApiRequest({
-            method: "POST",
-            url: `${this.payloadApiEnv}/v/1/tracking`,
-            headers: [
-                {
-                    name: "Content-Type",
-                    value: "application/json",
-                },
-            ],
-            requestPayload: {
-                os: window.navigator.userAgent,
-                bundle_id: this.bundleId,
-                bundle_version: this.bundleVersion,
-                sdk_version: packageJson.version,
-                udid: this.advertiserId,
-                app_id: this.apiKey,
-                tracking: finalPayloadStatusList,
-            },
-            onError: () => {
-                console.error(
-                    "An error occurred while updating payload status."
-                );
-            },
-        });
+        this.#sendPayloadStatusUpdate(finalPayloadStatusList);
     }
 
     /**
@@ -867,6 +861,37 @@ class AdadaptedJsSdk {
     //         }
     //     }
     // }
+
+    /**
+     * Triggers the API request to submit payload status.
+     * @param {Array} payloadStatusList - The list of payload status objects to submit.
+     */
+    #sendPayloadStatusUpdate(payloadStatusList) {
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.payloadApiEnv}/v/1/tracking`,
+            headers: [
+                {
+                    name: "Content-Type",
+                    value: "application/json",
+                },
+            ],
+            requestPayload: {
+                os: window.navigator.userAgent,
+                bundle_id: this.bundleId,
+                bundle_version: this.bundleVersion,
+                sdk_version: packageJson.version,
+                udid: this.advertiserId,
+                app_id: this.apiKey,
+                tracking: payloadStatusList,
+            },
+            onError: () => {
+                console.error(
+                    "An error occurred while updating payload status."
+                );
+            },
+        });
+    }
 
     /**
      * Renders or updates the ad zone data.
