@@ -1,21 +1,19 @@
 {
     "compilerOptions": {
-        "outDir": "./dist/",
+        "outDir": "./dist",
         "sourceMap": true,
         "strict": true,
         "module": "commonjs",
         "moduleResolution": "node",
         "allowJs": true,
-        "target": "es5",
-        "jsx": "react",
+        "target": "es6",
         "lib": ["es2017", "es7", "es6", "dom"],
         "allowSyntheticDefaultImports": true,
         "resolveJsonModule": true,
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
-        "skipLibCheck": true,
-        "declaration": true
+        "skipLibCheck": true
     },
     "include": ["./src/**/*", "./*"],
-    "exclude": []
+    "exclude": ["./dist/**/*"]
 }

@@ -31,14 +31,14 @@ jobs:
                   node-version: 16
             - name: NPM Install
               run: npm install
-            # - name: NPM Audit Fix
-            #   run: npm audit fix
+            - name: NPM Audit Fix
+              run: npm audit fix
             - name: Prettier Validation
               run: npm run prettier
             - name: Linting Validation
               run: npm run lint
-            # - name: Build Validation
-            #   run: npm run compile
+            - name: Build Validation
+              run: npm run compile
             # - name: Unit Test Validation
             #   run: npm run test
     deploy_production:
@@ -65,8 +65,8 @@ jobs:
                   body: ${{steps.tag_version.outputs.changelog}}
             - name: NPM Install
               run: npm install
-            # - name: NPM Audit Fix
-            #   run: npm audit fix
+            - name: NPM Audit Fix
+              run: npm audit fix
             - name: Build Files
               run: npm run build-prod
             - name: Get Access Token

@@ -1,0 +1,16 @@
+.cache-loader/
+demo/
+node_modules/
+coverage/
+__mocks__/
+.idea
+.vscode
+.npmrc
+.eslintrc.json
+.gitlab-ci.yml
+.prettierignore
+.prettierrc.json
+jest.setup.ts
+tsconfig.json
+webpack.config.js
+.DS_Store

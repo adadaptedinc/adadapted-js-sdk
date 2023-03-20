@@ -2,6 +2,7 @@ const path = require("path");
 const autoprefixer = require("autoprefixer");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+const CopyWebpackPlugin = require("copy-webpack-plugin");
 const WebpackBundleAnalyzer = require("webpack-bundle-analyzer");
 
 /**
@@ -30,10 +31,14 @@ const PATHS = {
      * Project source folder.
      */
     src: path.resolve(__dirname, "./src"),
+    /**
+     * Project types folder.
+     */
+    types: path.resolve(__dirname, "./types"),
 };
 
 module.exports = (env) => {
-    const isDev = env.prod !== "true";
+    const isDev = env.build === "dev";
     const isSourceMap = env.sourceMap === "true";
 
     const createConfig = (libraryToTarget) => {
@@ -67,8 +72,9 @@ module.exports = (env) => {
                             {
                                 loader: "postcss-loader",
                                 options: {
-                                    ident: "postcss",
-                                    plugins: [autoprefixer()],
+                                    ipostcssOptions: {
+                                        plugins: [autoprefixer()],
+                                    },
                                     sourceMap: isSourceMap,
                                 },
                             },
@@ -105,7 +111,6 @@ module.exports = (env) => {
                                 options: {
                                     presets: [
                                         "@babel/env",
-                                        "@babel/preset-react",
                                         "@babel/preset-typescript",
                                     ],
                                     plugins: [
@@ -133,12 +138,20 @@ module.exports = (env) => {
                     },
                 ],
             },
+            experiments: {
+                outputModule: libraryToTarget === "module",
+            },
             output: {
-                filename: "adadapted-js-sdk." + libraryToTarget + ".js",
+                filename: "index.js",
                 path: PATHS.dist,
                 publicPath: "./",
-                library: "AdadaptedJsSdk",
-                libraryTarget: libraryToTarget,
+                library: {
+                    name:
+                        libraryToTarget !== "module"
+                            ? "AdadaptedJsSdk"
+                            : undefined,
+                    type: libraryToTarget,
+                },
             },
             plugins: [
                 new WebpackBundleAnalyzer.BundleAnalyzerPlugin({
@@ -151,6 +164,14 @@ module.exports = (env) => {
                 }),
                 new ForkTsCheckerWebpackPlugin({
                     formatter: "codeframe",
+                }),
+                new CopyWebpackPlugin({
+                    patterns: [
+                        {
+                            from: `${PATHS.src}/types`,
+                            to: `${PATHS.dist}/types`,
+                        },
+                    ],
                 }),
             ],
             resolve: {
@@ -169,5 +190,6 @@ module.exports = (env) => {
         // createConfig("amd"),
         // createConfig("umd"),
         createConfig("window"),
+        // createConfig("module"),
     ];
 };
