@@ -47,13 +47,6 @@ declare class AdadaptedJsSdk {
      */
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
     /**
-     * Requests all available Payload server item data for the user.
-     *
-     * NOTE: If there are payload items available, the onPayloadsAvailable() callback
-     * will be triggered and the items will be provided through that method.
-     */
-    requestPayloadItemData(): void;
-    /**
      * Creates all Ad Zone Info objects based on provided Ad Zones.
      * @param adZones - The object of available zones.
      * @returns the array of Ad Zone Info objects.
