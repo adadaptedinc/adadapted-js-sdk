@@ -824,7 +824,11 @@ export const App: FC = (): ReactElement => {
                         );
                     })}
                 </div>
-                <Dialog className="pending-atl-items-dialog" open={!!pendingAtlItems} disableEscapeKeyDown={true}>
+                <Dialog
+                    className="pending-atl-items-dialog"
+                    open={!!pendingAtlItems && pendingAtlItems.length > 0}
+                    disableEscapeKeyDown={true}
+                >
                     <DialogTitle>Where would you like your items to go?</DialogTitle>
                     <DialogContent>
                         {pendingAtlItems?.map((item, idx) => {
