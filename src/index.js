@@ -171,76 +171,6 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Requests all available Payload server item data for the user.
-     */
-    requestPayloadItemData() {
-        this.#sendApiRequest({
-            method: "POST",
-            url: `${this.payloadApiEnv}/v/1/pickup`,
-            headers: [
-                {
-                    name: "accept",
-                    value: "application/json",
-                },
-            ],
-            requestPayload: {
-                app_id: this.apiKey,
-                session_id: this.sessionId,
-                udid: this.advertiserId,
-            },
-            onSuccess: (response) => {
-                const finalItemList = [];
-
-                for (const payload of response.payloads) {
-                    if (
-                        finalItemList.find(
-                            (item) => item.payload_id === payload.payload_id
-                        )
-                    ) {
-                        // The payload ID was already placed into the finalItemList array.
-                        // Mark this occurrance as a duplicate and skip adding it to finalItemList.
-                        this.#sendPayloadStatusUpdate([
-                            {
-                                payload_id: payload.payload_id,
-                                status: "duplicate",
-                                event_timestamp: new Date().getTime(),
-                            },
-                        ]);
-                    } else {
-                        // The payload ID was not found in finalItemList, so add it.
-                        const detailedItemList = [];
-
-                        for (const itemData of payload.detailed_list_items) {
-                            detailedItemList.push({
-                                product_title: itemData["product_title"],
-                                product_brand: itemData["product_brand"],
-                                product_category: itemData["product_category"],
-                                product_barcode: itemData["product_barcode"],
-                                product_discount: itemData["product_discount"],
-                                product_image: itemData["product_image"],
-                                product_sku: itemData["product_sku"],
-                            });
-                        }
-
-                        finalItemList.push({
-                            payload_id: payload.payload_id,
-                            detailed_list_items: detailedItemList,
-                        });
-                    }
-                }
-
-                // Send the items to the client, so they can add them to the list.
-                this.onPayloadsAvailable(finalItemList);
-            },
-            onError: () => {
-                console.error(
-                    "An error occurred while requesting payload item data."
-                );
-            },
-        });
-    }
-
-    /**
      * Searches through available ad keywords based on provided search term.
      * @param {string} searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
@@ -465,6 +395,7 @@ class AdadaptedJsSdk {
     /**
      * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
      * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
+     * NOTE: This method is not optional. The client must trigger this method.
      */
     acknowledgeAdded() {
         if (this.lastSelectedATL !== undefined) {
@@ -479,6 +410,7 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are added to the cart by the user for reports we provide to the client.
+     * NOTE: This is an optional method!
      * @param {string[]} itemNames - The items to report.
      * @param {string} cartId - The ID of the cart the items were placed within.
      */
@@ -492,6 +424,7 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are deleted from the cart by the user for reports we provide to the client.
+     * NOTE: This is an optional method!
      * @param {string[]} itemNames - The items to report.
      * @param {string} cartId - The ID of the cart the items were placed within.
      */
@@ -505,6 +438,7 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are added to a list for reports we provide to the client.
+     * NOTE: This is an optional method!
      * @param {string[]} itemNames - The items to report.
      * @param {string} listName - (optional) The list to associate the items with, if available.
      */
@@ -518,6 +452,7 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
+     * NOTE: This is an optional method!
      * @param {string[]} itemNames - The items to report.
      * @param {string} listName - (optional) The list the items are associated with, if available.
      */
@@ -531,6 +466,7 @@ class AdadaptedJsSdk {
 
     /**
      * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
+     * NOTE: This is an optional method!
      * @param {string[]} itemNames - The items to report.
      * @param {string} listName - (optional) The list the items are associated with, if available.
      */
@@ -587,6 +523,14 @@ class AdadaptedJsSdk {
      * finished with the SDK to ensure you don't experience memory leaks.
      */
     unmount() {
+        if (this.adZones && this.adZones.length) {
+            for (const adZone of this.adZones) {
+                if (this.cycleAdTimers[adZone.id]) {
+                    clearTimeout(this.cycleAdTimers[adZone.id]);
+                }
+            }
+        }
+
         if (this.refreshAdZonesTimer) {
             clearTimeout(this.refreshAdZonesTimer);
         }
@@ -640,7 +584,7 @@ class AdadaptedJsSdk {
 
                     // Make the initial call to the Payload data server to see if
                     // the user has any outstanding items to be added to list.
-                    this.requestPayloadItemData();
+                    this.#requestPayloadItemData();
 
                     resolve();
                 } else {
@@ -693,7 +637,7 @@ class AdadaptedJsSdk {
 
                             // Make the initial call to the Payload data server to see if
                             // the user has any outstanding items to be added to list.
-                            this.requestPayloadItemData();
+                            this.#requestPayloadItemData();
 
                             resolve();
                         },
@@ -1628,6 +1572,76 @@ class AdadaptedJsSdk {
         }
 
         return term;
+    }
+
+    /**
+     * Requests all available Payload server item data for the user.
+     */
+    #requestPayloadItemData() {
+        this.#sendApiRequest({
+            method: "POST",
+            url: `${this.payloadApiEnv}/v/1/pickup`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+            ],
+            requestPayload: {
+                app_id: this.apiKey,
+                session_id: this.sessionId,
+                udid: this.advertiserId,
+            },
+            onSuccess: (response) => {
+                const finalItemList = [];
+
+                for (const payload of response.payloads) {
+                    if (
+                        finalItemList.find(
+                            (item) => item.payload_id === payload.payload_id
+                        )
+                    ) {
+                        // The payload ID was already placed into the finalItemList array.
+                        // Mark this occurrance as a duplicate and skip adding it to finalItemList.
+                        this.#sendPayloadStatusUpdate([
+                            {
+                                payload_id: payload.payload_id,
+                                status: "duplicate",
+                                event_timestamp: new Date().getTime(),
+                            },
+                        ]);
+                    } else {
+                        // The payload ID was not found in finalItemList, so add it.
+                        const detailedItemList = [];
+
+                        for (const itemData of payload.detailed_list_items) {
+                            detailedItemList.push({
+                                product_title: itemData["product_title"],
+                                product_brand: itemData["product_brand"],
+                                product_category: itemData["product_category"],
+                                product_barcode: itemData["product_barcode"],
+                                product_discount: itemData["product_discount"],
+                                product_image: itemData["product_image"],
+                                product_sku: itemData["product_sku"],
+                            });
+                        }
+
+                        finalItemList.push({
+                            payload_id: payload.payload_id,
+                            detailed_list_items: detailedItemList,
+                        });
+                    }
+                }
+
+                // Send the items to the client, so they can add them to the list.
+                this.onPayloadsAvailable(finalItemList);
+            },
+            onError: () => {
+                console.error(
+                    "An error occurred while requesting payload item data."
+                );
+            },
+        });
     }
 
     /**
