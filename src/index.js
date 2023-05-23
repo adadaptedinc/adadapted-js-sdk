@@ -30,6 +30,7 @@ class AdadaptedJsSdk {
         this.initialBodyOverflowStyle = document.body.style.overflow;
         this.scrollEventAbortController = undefined;
         this.adZoneCurrentAdImpressionTracker = {};
+        this.params = undefined;
 
         /**
          * Triggered when the ad zone has refreshed.
@@ -115,6 +116,9 @@ class AdadaptedJsSdk {
                 if (props.bundleVersion) {
                     this.bundleVersion = props.bundleVersion;
                 }
+
+                // Set the additional params to use when interacting with the API.
+                this.params = props.params;
 
                 // Set whether the user is allowed to be retargetted by ads.
                 this.allowRetargeting = props.allowRetargeting;
@@ -519,6 +523,22 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Method that can be triggered to update the Store ID if you are targeting ads by store.
+     * NOTE: Use this method when a user has changed their focused on store.
+     * @param {string} newStoreId - The new store ID to use going forward.
+     */
+    updateStoreId(newStoreId) {
+        // Update the store ID.
+        this.params = {
+            ...this.params,
+            storeId: newStoreId,
+        };
+
+        // Refresh the ad zones so the new store ID takes affect.
+        this.#refreshAdZones();
+    }
+
+    /**
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
      */
@@ -611,6 +631,13 @@ class AdadaptedJsSdk {
                             bundle_version: this.bundleVersion,
                             allow_retargeting: this.allowRetargeting,
                             created_at: Math.floor(new Date().getTime() / 1000),
+                            params: this.params
+                                ? {
+                                      store_id: this.params.storeId
+                                          ? this.params.storeId
+                                          : undefined,
+                                  }
+                                : undefined,
                         },
                         onSuccess: (response) => {
                             localStorage.setItem(
@@ -709,57 +736,70 @@ class AdadaptedJsSdk {
                 : 300000;
 
         this.refreshAdZonesTimer = setTimeout(() => {
-            // Need to check if a session timeout has occurred first so
-            // we don't try to refresh the ads with an invalid session.
-            if (
-                this.#calculateRemainingSessionTimeUntilExpiration(
-                    this.sessionInfo.session_expires_at
-                ) <= 0
-            ) {
-                // Refresh the session instead of just refreshing ads.
-                this.#initializeSession()
-                    .then(() => {
-                        resolve();
-                    })
-                    .catch((errorMessage) => {
-                        reject(errorMessage);
-                    });
-            } else {
-                // We have a valid session still, so just refresh the ads.
-                this.#sendApiRequest({
-                    method: "GET",
-                    url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
-                    headers: [
-                        {
-                            name: "accept",
-                            value: "application/json",
-                        },
-                    ],
-                    onSuccess: (response) => {
-                        this.sessionInfo = response;
-
-                        // Render the Ad Zones.
-                        this.#renderAdZones(response.zones);
-
-                        // Call the user defined callback indicating
-                        // the session data has been refreshed.
-                        this.onAdZonesRefreshed();
-
-                        // Start the timer again based on the new session data.
-                        this.#createRefreshAdZonesTimer();
-                    },
-                    onError: () => {
-                        console.error(
-                            "An error occurred refreshing the ad zones."
-                        );
-
-                        // Start the timer again so we can make another
-                        // attempt to refresh the session data.
-                        this.#createRefreshAdZonesTimer();
-                    },
-                });
-            }
+            this.#refreshAdZones();
         }, timerMs);
+    }
+
+    /**
+     * Refreshes the content for all ad zones.
+     */
+    #refreshAdZones() {
+        // Need to check if a session timeout has occurred first so
+        // we don't try to refresh the ads with an invalid session.
+        if (
+            this.#calculateRemainingSessionTimeUntilExpiration(
+                this.sessionInfo.session_expires_at
+            ) <= 0
+        ) {
+            // Refresh the session instead of just refreshing ads.
+            this.#initializeSession()
+                .then(() => {
+                    resolve();
+                })
+                .catch((errorMessage) => {
+                    reject(errorMessage);
+                });
+        } else {
+            // We have a valid session still, so just refresh the ads.
+            this.#sendApiRequest({
+                method: "GET",
+                url: `${this.apiEnv}/v/0.9.5/${
+                    this.deviceOs
+                }/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${
+                    this.advertiserId
+                }&sdk=${packageJson.version}${
+                    this.params && this.params.storeId
+                        ? `&storeId=${this.params.storeId}`
+                        : ""
+                }`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                onSuccess: (response) => {
+                    this.sessionInfo = response;
+
+                    // Render the Ad Zones.
+                    this.#renderAdZones(response.zones);
+
+                    // Call the user defined callback indicating
+                    // the session data has been refreshed.
+                    this.onAdZonesRefreshed();
+
+                    // Start the timer again based on the new session data.
+                    this.#createRefreshAdZonesTimer();
+                },
+                onError: () => {
+                    console.error("An error occurred refreshing the ad zones.");
+
+                    // Start the timer again so we can make another
+                    // attempt to refresh the session data.
+                    this.#createRefreshAdZonesTimer();
+                },
+            });
+        }
     }
 
     /**
@@ -1750,7 +1790,6 @@ class AdadaptedJsSdk {
      *      - safe-area-inset-bottom
      *      - safe-area-inset-left
      *      - safe-area-inset-right
-     *
      * @returns a boolean indicating whether or not "safe area" padding is needed.
      */
     #needsSafeAreaPadding() {
