@@ -18,11 +18,14 @@ declare class AdadaptedJsSdk {
     adZones: any;
     lastSelectedATL: any;
     refreshAdZonesTimer: any;
+    refreshSessionTimer: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
     cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
     scrollEventAbortController: any;
+    adZoneCurrentAdImpressionTracker: { [key: string]: boolean };
+    params: { [key: string]: any };
     onAdZonesRefreshed: () => void;
     onAddItemsTriggered: () => void;
     onPayloadsAvailable: () => void;
@@ -46,12 +49,6 @@ declare class AdadaptedJsSdk {
      * @returns a Promise of void.
      */
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
-    /**
-     * Creates all Ad Zone Info objects based on provided Ad Zones.
-     * @param adZones - The object of available zones.
-     * @returns the array of Ad Zone Info objects.
-     */
-    generateAdZones(adZones: { [key: number]: AdadaptedJsSdk.Zone }): void;
     /**
      * Searches through available ad keywords based on provided search term.
      * @param searchTerm - The search term used to match against available keyword intercepts.
