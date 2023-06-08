@@ -221,27 +221,27 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
-    const sdkAppDetails: SdkDetails = {
-        apiEnv: "dev",
-        apiKey: "NJIXNMRHZDC5ODCY",
-        zonePlacements: [
-            {
-                zoneId: "102004",
-                width: 640,
-                height: 200,
-            },
-            {
-                zoneId: "101991",
-                width: 640,
-                height: 200,
-            },
-            {
-                zoneId: "101990",
-                width: 1200,
-                height: 627,
-            },
-        ],
-    };
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "NJIXNMRHZDC5ODCY",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102004",
+    //             width: 640,
+    //             height: 200,
+    //         },
+    //         {
+    //             zoneId: "101991",
+    //             width: 640,
+    //             height: 200,
+    //         },
+    //         {
+    //             zoneId: "101990",
+    //             width: 1200,
+    //             height: 627,
+    //         },
+    //     ],
+    // };
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "prod",
@@ -259,6 +259,18 @@ export const App: FC = (): ReactElement => {
     //         },
     //     ],
     // };
+
+    const sdkAppDetails: SdkDetails = {
+        apiEnv: "dev",
+        apiKey: "2857150X63CECC12",
+        zonePlacements: [
+            {
+                zoneId: "102110",
+                width: 640,
+                height: 200,
+            },
+        ],
+    };
 
     const sdk = new AdadaptedJsSdk();
 
@@ -519,6 +531,9 @@ export const App: FC = (): ReactElement => {
                 allowRetargeting: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
+                params: {
+                    storeId: "421",
+                },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
                 },
