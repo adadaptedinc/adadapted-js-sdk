@@ -535,7 +535,7 @@ class AdadaptedJsSdk {
         };
 
         // Refresh the ad zones so the new store ID takes affect.
-        this.#refreshAdZones();
+        this.#refreshAdZones(true);
     }
 
     /**
@@ -567,15 +567,24 @@ class AdadaptedJsSdk {
         return new Promise((resolve, reject) => {
             this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
                 let createNewSession = true;
-                const existingSession = localStorage.getItem(
+                const existingSessionData = localStorage.getItem(
                     `aa-session-${hashedApiKey}`
                 );
                 let parsedExistingSession;
 
-                if (existingSession) {
-                    parsedExistingSession = JSON.parse(atob(existingSession));
+                if (existingSessionData) {
+                    const parsedExistingSessionData = JSON.parse(
+                        atob(existingSessionData)
+                    );
+                    parsedExistingSession = parsedExistingSessionData.session;
+
+                    const currentStoreId =
+                        this.params && this.params.storeId
+                            ? this.params.storeId
+                            : null;
 
                     if (
+                        parsedExistingSessionData.storeId === currentStoreId &&
                         this.#calculateRemainingSessionTimeUntilExpiration(
                             parsedExistingSession.session_expires_at
                         ) > 0
@@ -642,7 +651,15 @@ class AdadaptedJsSdk {
                         onSuccess: (response) => {
                             localStorage.setItem(
                                 `aa-session-${hashedApiKey}`,
-                                btoa(JSON.stringify(response))
+                                btoa(
+                                    JSON.stringify({
+                                        storeId:
+                                            this.params && this.params.storeId
+                                                ? this.params.storeId
+                                                : null,
+                                        session: response,
+                                    })
+                                )
                             );
 
                             this.sessionId = response.session_id;
@@ -736,17 +753,19 @@ class AdadaptedJsSdk {
                 : 300000;
 
         this.refreshAdZonesTimer = setTimeout(() => {
-            this.#refreshAdZones();
+            this.#refreshAdZones(false);
         }, timerMs);
     }
 
     /**
      * Refreshes the content for all ad zones.
+     * @param isChangingStoreId - If true, the store ID has changed.
      */
-    #refreshAdZones() {
+    #refreshAdZones(isChangingStoreId) {
         // Need to check if a session timeout has occurred first so
         // we don't try to refresh the ads with an invalid session.
         if (
+            isChangingStoreId ||
             this.#calculateRemainingSessionTimeUntilExpiration(
                 this.sessionInfo.session_expires_at
             ) <= 0
