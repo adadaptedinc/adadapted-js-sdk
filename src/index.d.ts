@@ -18,11 +18,14 @@ declare class AdadaptedJsSdk {
     adZones: any;
     lastSelectedATL: any;
     refreshAdZonesTimer: any;
+    refreshSessionTimer: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
     cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
     scrollEventAbortController: any;
+    adZoneCurrentAdImpressionTracker: { [key: string]: boolean };
+    params: { [key: string]: any };
     onAdZonesRefreshed: () => void;
     onAddItemsTriggered: () => void;
     onPayloadsAvailable: () => void;
@@ -46,12 +49,6 @@ declare class AdadaptedJsSdk {
      * @returns a Promise of void.
      */
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
-    /**
-     * Creates all Ad Zone Info objects based on provided Ad Zones.
-     * @param adZones - The object of available zones.
-     * @returns the array of Ad Zone Info objects.
-     */
-    generateAdZones(adZones: { [key: number]: AdadaptedJsSdk.Zone }): void;
     /**
      * Searches through available ad keywords based on provided search term.
      * @param searchTerm - The search term used to match against available keyword intercepts.
@@ -118,6 +115,12 @@ declare class AdadaptedJsSdk {
         payloadStatusList: AdadaptedJsSdk.PayloadStatus[]
     ): void;
     /**
+     * Method that can be triggered to update the Store ID if you are targeting ads by store.
+     * NOTE: Use this method when a user has changed their focused on store.
+     * @param newStoreId - The new store ID to use going forward.
+     */
+    updateStoreId(newStoreId: string): void;
+    /**
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
      */
@@ -172,6 +175,10 @@ declare namespace AdadaptedJsSdk {
          */
         apiEnv?: "prod" | "dev" | "mock";
         /**
+         * Additional params that can be provided when initializing a session.
+         */
+        params?: InitializeParams;
+        /**
          * Callback that gets triggered when the session/zones/ads data
          * gets refreshed and is now available for reference.
          */
@@ -186,6 +193,16 @@ declare namespace AdadaptedJsSdk {
          * @param payloads - All payloads the client must go through.
          */
         onPayloadsAvailable?(payloads: Payload[]): void;
+    }
+
+    /**
+     * Interface defining additional params used when initializing a session.
+     */
+    export interface InitializeParams {
+        /**
+         * The ID of the store you would like to target ads for.
+         */
+        storeId: string;
     }
 
     /**
