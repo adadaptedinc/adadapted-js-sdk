@@ -198,7 +198,7 @@ declare namespace AdadaptedJsSdk {
          * @param adZoneAdAvailabilityMap - A mapping of all ad zones and true/false based on if ads are available for a given ad zone.
          */
         onAdsRetrieved?(adZoneAdAvailabilityMap: {
-            [id: string]: boolean;
+            [key: string]: boolean;
         }): void;
     }
 
