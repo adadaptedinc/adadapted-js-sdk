@@ -193,6 +193,13 @@ declare namespace AdadaptedJsSdk {
          * @param payloads - All payloads the client must go through.
          */
         onPayloadsAvailable?(payloads: Payload[]): void;
+        /**
+         * Callback that gets triggered when ads have been retrieved.
+         * @param adZoneAdAvailabilityMap - A mapping of all ad zones and true/false based on if ads are available for a given ad zone.
+         */
+        onAdsRetrieved?(adZoneAdAvailabilityMap: {
+            [key: string]: boolean;
+        }): void;
     }
 
     /**
