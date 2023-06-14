@@ -50,6 +50,13 @@ class AdadaptedJsSdk {
         this.onPayloadsAvailable = () => {
             // Defaulting to empty method.
         };
+
+        /**
+         * Triggered when ads have been retrieved.
+         */
+        this.onAdsRetrieved = () => {
+            // Defaulting to empty method.
+        };
     }
 
     /**
@@ -158,6 +165,12 @@ class AdadaptedJsSdk {
                 // globally for use when the method needs to be triggered.
                 if (props.onPayloadsAvailable) {
                     this.onPayloadsAvailable = props.onPayloadsAvailable;
+                }
+
+                // If the callback for onAdsRetrieved was provided, set it
+                // globally for use when the method needs to be triggered.
+                if (props.onAdsRetrieved) {
+                    this.onAdsRetrieved = props.onAdsRetrieved;
                 }
 
                 this.deviceOs = this.#getOperatingSystem();
@@ -950,6 +963,7 @@ class AdadaptedJsSdk {
      */
     #generateAdZones(adZonesData) {
         const adZoneInfoList = [];
+        const adZonesAdAvailabilityMap = {};
 
         // We are iterating an object, so we will get the property ID
         // and use that to access the data from the same object.
@@ -972,8 +986,22 @@ class AdadaptedJsSdk {
                     adZone: adZoneContainer,
                     adZoneData: adZonesData[adZoneId],
                 });
+
+                // Track if the ad zone had ads available.
+                adZonesAdAvailabilityMap[adZoneId] =
+                    adZonesData[adZoneId].ads.length > 0;
             }
         }
+
+        // Ensure all possible ad zone IDs have a value to indicate ads are or are not available.
+        for (const [key, value] of Object.entries(this.zonePlacements)) {
+            if (!adZonesAdAvailabilityMap[key]) {
+                adZonesAdAvailabilityMap[key] = false;
+            }
+        }
+
+        // Trigger the callback to let the app know what ad zones have ads.
+        this.onAdsRetrieved(adZonesAdAvailabilityMap);
 
         return adZoneInfoList;
     }

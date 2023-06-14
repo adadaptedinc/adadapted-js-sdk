@@ -262,12 +262,17 @@ export const App: FC = (): ReactElement => {
 
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "2857150X63CECC12",
+        apiKey: "0A2C2F0X63E5093E",
         zonePlacements: [
             {
-                zoneId: "102110",
-                width: 640,
-                height: 200,
+                zoneId: "102135",
+                width: 360,
+                height: 100,
+            },
+            {
+                zoneId: "102136",
+                width: 360,
+                height: 100,
             },
         ],
     };
@@ -545,6 +550,9 @@ export const App: FC = (): ReactElement => {
                     }
 
                     setPendingAtlItems(payloadItems);
+                },
+                onAdsRetrieved: (adZoneAdAvailabilityMap) => {
+                    console.log({ adZoneAdAvailabilityMap });
                 },
             })
             .then(() => {
