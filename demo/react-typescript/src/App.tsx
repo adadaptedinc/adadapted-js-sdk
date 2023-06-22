@@ -260,17 +260,39 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "0A2C2F0X63E5093E",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102135",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102136",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "0A2C2F0X63E5093E",
+        apiKey: "CE60A70X6480D077",
         zonePlacements: [
             {
-                zoneId: "102135",
+                zoneId: "102151",
                 width: 360,
                 height: 100,
             },
             {
-                zoneId: "102136",
+                zoneId: "102150",
+                width: 360,
+                height: 100,
+            },
+            {
+                zoneId: "102161",
                 width: 360,
                 height: 100,
             },
