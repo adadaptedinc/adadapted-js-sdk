@@ -15,6 +15,7 @@ class AdadaptedJsSdk {
         this.allowRetargeting = true;
         this.zonePlacements = undefined;
         this.apiEnv = this.#ApiEnv.Prod;
+        this.apiEnvString = "prod";
         this.listManagerApiEnv = this.#ListManagerApiEnv.Prod;
         this.payloadApiEnv = this.#PayloadApiEnv.Prod;
         this.deviceOs = undefined;
@@ -135,6 +136,8 @@ class AdadaptedJsSdk {
 
                 // Set the API environments based on the provided override value.
                 // If the apiEnv value is not provided, production will be used as default.
+                this.apiEnvString = props.apiEnv;
+
                 if (props.apiEnv === "mock") {
                     this.apiEnv = this.#ApiEnv.Mock;
                     this.payloadApiEnv = this.#PayloadApiEnv.Mock;
@@ -581,7 +584,7 @@ class AdadaptedJsSdk {
             this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
                 let createNewSession = true;
                 const existingSessionData = localStorage.getItem(
-                    `aa-session-${hashedApiKey}`
+                    `aa-session-${this.apiEnvString}-${hashedApiKey}`
                 );
                 let parsedExistingSession;
 
@@ -663,7 +666,7 @@ class AdadaptedJsSdk {
                         },
                         onSuccess: (response) => {
                             localStorage.setItem(
-                                `aa-session-${hashedApiKey}`,
+                                `aa-session-${this.apiEnvString}-${hashedApiKey}`,
                                 btoa(
                                     JSON.stringify({
                                         storeId:
