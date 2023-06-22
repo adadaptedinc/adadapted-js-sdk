@@ -801,7 +801,7 @@ class AdadaptedJsSdk {
                     this.advertiserId
                 }&sdk=${packageJson.version}${
                     this.params && this.params.storeId
-                        ? `&storeId=${this.params.storeId}`
+                        ? `&storeID=${this.params.storeId}`
                         : ""
                 }`,
                 headers: [
