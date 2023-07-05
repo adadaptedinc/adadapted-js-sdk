@@ -1,7 +1,7 @@
 {
     "name": "@adadapted/js-sdk",
     "description": "The AdAdapted JS SDK.",
-    "version": "2.2.2",
+    "version": "2.2.3",
     "main": "src/index.js",
     "module": "src/index.js",
     "types": "src/**/*.d.ts",
