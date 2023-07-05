@@ -1301,8 +1301,7 @@ class AdadaptedJsSdk {
         if (
             this.#getOperatingSystem() !== this.#DeviceOS.DESKTOP &&
             (currentAd.action_type === this.#AdActionType.POPUP ||
-                currentAd.action_type === this.#AdActionType.LINK ||
-                currentAd.action_type === this.#AdActionType.EXTERNAL) &&
+                currentAd.action_type === this.#AdActionType.LINK) &&
             currentAd.action_path
         ) {
             // Mobile only.
@@ -1349,13 +1348,15 @@ class AdadaptedJsSdk {
                 this.#ReportedEventType.INTERACTION
             );
         } else if (
-            this.#getOperatingSystem() === this.#DeviceOS.DESKTOP &&
-            (currentAd.action_type === this.#AdActionType.POPUP ||
-                currentAd.action_type === this.#AdActionType.LINK ||
-                currentAd.action_type === this.#AdActionType.EXTERNAL) &&
+            ((this.#getOperatingSystem() === this.#DeviceOS.DESKTOP &&
+                (currentAd.action_type === this.#AdActionType.POPUP ||
+                    currentAd.action_type === this.#AdActionType.LINK ||
+                    currentAd.action_type === this.#AdActionType.EXTERNAL)) ||
+                (this.#getOperatingSystem() !== this.#DeviceOS.DESKTOP &&
+                    currentAd.action_type === this.#AdActionType.EXTERNAL)) &&
             currentAd.action_path
         ) {
-            // Only desktop.
+            // Only desktop and mobile external.
             window.open(currentAd.action_path, "_blank");
 
             this.#triggerReportAdEvent(

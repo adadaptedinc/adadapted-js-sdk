@@ -93,7 +93,7 @@ declare class AdadaptedJsSdk {
      * @param itemNames - The items to report.
      * @param listName - (optional) The list to associate the items with, if available.
      */
-    reportItemsAddedToList(itemNames: string[], listName: string): void;
+    reportItemsAddedToList(itemNames: string[], listName?: string): void;
     /**
      * Client must trigger this method when any items are deleted from a list for reports we provide to the client.
      * @param itemNames - The items to report.
