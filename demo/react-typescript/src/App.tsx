@@ -558,9 +558,6 @@ export const App: FC = (): ReactElement => {
                 allowRetargeting: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
-                params: {
-                    storeId: "421",
-                },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
                 },
