@@ -1017,25 +1017,28 @@ class AdadaptedJsSdk {
         for (const adZone of adZones) {
             const zonePlacementId = this.zonePlacements[adZone.zoneId];
             const containerElement = document.getElementById(zonePlacementId);
-            const adZoneDisplayedAdIndex = parseInt(
-                containerElement
-                    .getElementsByClassName("AdZone")[0]
-                    .getAttribute("data-displayedAdIndex"),
-                10
-            );
 
-            if (
-                this.#isInViewport(containerElement) &&
-                !this.adZoneCurrentAdImpressionTracker[adZone.adZoneData.id]
-            ) {
-                this.#triggerReportAdEvent(
-                    adZone.adZoneData.ads[adZoneDisplayedAdIndex],
-                    this.#ReportedEventType.IMPRESSION
+            if (containerElement) {
+                const adZoneDisplayedAdIndex = parseInt(
+                    containerElement
+                        .getElementsByClassName("AdZone")[0]
+                        .getAttribute("data-displayedAdIndex"),
+                    10
                 );
 
-                this.adZoneCurrentAdImpressionTracker[
-                    adZone.adZoneData.id
-                ] = true;
+                if (
+                    this.#isInViewport(containerElement) &&
+                    !this.adZoneCurrentAdImpressionTracker[adZone.adZoneData.id]
+                ) {
+                    this.#triggerReportAdEvent(
+                        adZone.adZoneData.ads[adZoneDisplayedAdIndex],
+                        this.#ReportedEventType.IMPRESSION
+                    );
+
+                    this.adZoneCurrentAdImpressionTracker[
+                        adZone.adZoneData.id
+                    ] = true;
+                }
             }
         }
     }
