@@ -1126,6 +1126,25 @@ class AdadaptedJsSdk {
         adZoneClickableArea.style.top = "0";
         adZoneClickableArea.style.left = "0";
 
+        const reportAdIcon = document.createElement("a");
+        reportAdIcon.href = `https://feedback.add-it.io/?uid=${btoa(
+            this.advertiserId
+        )}&aid=${displayedAd.ad_id}&src=web`;
+        reportAdIcon.target = "_blank";
+        reportAdIcon.className = "report-ad-icon";
+        reportAdIcon.style.position = "absolute";
+        reportAdIcon.style.top = "3px";
+        reportAdIcon.style.right = "3px";
+        reportAdIcon.style.zIndex = 1;
+        reportAdIcon.style.cursor = "pointer";
+        reportAdIcon.style.fontFamily = "none";
+        reportAdIcon.innerHTML = `<svg width="14" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6.40001 4.48767H7.40001V5.48767H6.40001V4.48767Z" fill="#49B9EB"/>
+        <path d="M7.40001 6.31677H6.40001V9.73967H7.40001V6.31677Z" fill="#49B9EB"/>
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M7.8012 0.520311C7.40067 -0.173436 6.39933 -0.173437 5.9988 0.52031L0.140969 10.6664C-0.259566 11.3601 0.241102 12.2273 1.04217 12.2273H12.7578C13.5589 12.2273 14.0596 11.3601 13.659 10.6664L7.8012 0.520311ZM6.9 1.95938L1.83784 10.7273H11.9622L6.9 1.95938Z" fill="#49B9EB"/>
+        </svg>        
+        `;
+
         /**
          * Triggered when the ad zone clickable area has been clicked.
          * @param {Event} event - The click event.
@@ -1138,6 +1157,7 @@ class AdadaptedJsSdk {
 
         adZoneContainer.appendChild(adZoneIFrame);
         adZoneContainer.appendChild(adZoneClickableArea);
+        adZoneContainer.appendChild(reportAdIcon);
 
         return adZoneContainer;
     }
