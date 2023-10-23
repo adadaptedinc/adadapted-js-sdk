@@ -13,6 +13,8 @@ class AdadaptedJsSdk {
         this.bundleId = "js_default_bundleID";
         this.bundleVersion = "js_default_bundleVersion";
         this.allowRetargeting = true;
+        this.enablePayloads = false;
+        this.enableKeywordIntercept = false;
         this.zonePlacements = undefined;
         this.apiEnv = this.#ApiEnv.Prod;
         this.apiEnvString = "prod";
@@ -129,7 +131,13 @@ class AdadaptedJsSdk {
                 this.params = props.params;
 
                 // Set whether the user is allowed to be retargetted by ads.
-                this.allowRetargeting = props.allowRetargeting;
+                this.allowRetargeting = props.allowRetargeting ? true : false;
+
+                // Set whether external payloads are enabled.
+                this.enablePayloads = props.enablePayloads ? true : false;
+
+                // Set whether keyword intercepts are enabled.
+                this.enableKeywordIntercept = props.enableKeywordIntercept;
 
                 // Set the zone placements provided by the client.
                 this.zonePlacements = props.zonePlacements;
@@ -583,12 +591,14 @@ class AdadaptedJsSdk {
         return new Promise((resolve, reject) => {
             this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
                 let createNewSession = true;
-                const existingSessionData = localStorage.getItem(
+                let parsedExistingSession;
+                const sessionValue = localStorage.getItem(
                     `aa-session-${this.apiEnvString}-${hashedApiKey}`
                 );
-                let parsedExistingSession;
 
-                if (existingSessionData) {
+                if (sessionValue) {
+                    const existingSessionData =
+                        decodeURIComponent(sessionValue);
                     const parsedExistingSessionData = JSON.parse(
                         atob(existingSessionData)
                     );
@@ -665,18 +675,25 @@ class AdadaptedJsSdk {
                                 : undefined,
                         },
                         onSuccess: (response) => {
-                            localStorage.setItem(
-                                `aa-session-${this.apiEnvString}-${hashedApiKey}`,
-                                btoa(
-                                    JSON.stringify({
-                                        storeId:
-                                            this.params && this.params.storeId
-                                                ? this.params.storeId
-                                                : null,
-                                        session: response,
-                                    })
-                                )
-                            );
+                            const sessionJson = JSON.stringify({
+                                storeId:
+                                    this.params && this.params.storeId
+                                        ? this.params.storeId
+                                        : null,
+                                session: response,
+                            });
+
+                            try {
+                                this.#setSessionToLocalStorage(
+                                    hashedApiKey,
+                                    encodeURIComponent(sessionJson)
+                                );
+                            } catch {
+                                this.#setSessionToLocalStorage(
+                                    hashedApiKey,
+                                    this.#sanitizeStringToUTF8(sessionJson)
+                                );
+                            }
 
                             this.sessionId = response.session_id;
                             this.sessionInfo = response;
@@ -729,6 +746,35 @@ class AdadaptedJsSdk {
                     resolve(hashHex);
                 });
         });
+    }
+
+    /**
+     * Sanitizes a string so it only contains UTF-8 characters.
+     * @param {string} input - The string to sanitize.
+     * @returns a sanitized string that only contains UTF-8 characters.
+     */
+    #sanitizeStringToUTF8(input) {
+        let output = "";
+
+        for (let i = 0; i < input.length; i++) {
+            if (input.charCodeAt(i) <= 127) {
+                output += input.charAt(i);
+            }
+        }
+
+        return output;
+    }
+
+    /**
+     * Takes the session data and writes it to local storage.
+     * @param {string} hashedApiKey - The hashed value of the API key.
+     * @param {string} sessionData - The session data to store to local storage.
+     */
+    #setSessionToLocalStorage(hashedApiKey, sessionData) {
+        localStorage.setItem(
+            `aa-session-${this.apiEnvString}-${hashedApiKey}`,
+            btoa(sessionData)
+        );
     }
 
     /**
@@ -1649,24 +1695,26 @@ class AdadaptedJsSdk {
      * Trigger an API request to get all possible keyword intercepts for the session.
      */
     #getKeywordIntercepts() {
-        this.#sendApiRequest({
-            method: "GET",
-            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
-            headers: [
-                {
-                    name: "accept",
-                    value: "application/json",
+        if (this.enableKeywordIntercept) {
+            this.#sendApiRequest({
+                method: "GET",
+                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                onSuccess: (response) => {
+                    this.keywordIntercepts = response;
                 },
-            ],
-            onSuccess: (response) => {
-                this.keywordIntercepts = response;
-            },
-            onError: () => {
-                console.error(
-                    "An error occurred while retieving keyword intercepts."
-                );
-            },
-        });
+                onError: () => {
+                    console.error(
+                        "An error occurred while retieving keyword intercepts."
+                    );
+                },
+            });
+        }
     }
 
     /**
@@ -1692,70 +1740,75 @@ class AdadaptedJsSdk {
      * Requests all available Payload server item data for the user.
      */
     #requestPayloadItemData() {
-        this.#sendApiRequest({
-            method: "POST",
-            url: `${this.payloadApiEnv}/v/1/pickup`,
-            headers: [
-                {
-                    name: "accept",
-                    value: "application/json",
+        if (this.enablePayloads) {
+            this.#sendApiRequest({
+                method: "POST",
+                url: `${this.payloadApiEnv}/v/1/pickup`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                requestPayload: {
+                    app_id: this.apiKey,
+                    session_id: this.sessionId,
+                    udid: this.advertiserId,
                 },
-            ],
-            requestPayload: {
-                app_id: this.apiKey,
-                session_id: this.sessionId,
-                udid: this.advertiserId,
-            },
-            onSuccess: (response) => {
-                const finalItemList = [];
+                onSuccess: (response) => {
+                    const finalItemList = [];
 
-                for (const payload of response.payloads) {
-                    if (
-                        finalItemList.find(
-                            (item) => item.payload_id === payload.payload_id
-                        )
-                    ) {
-                        // The payload ID was already placed into the finalItemList array.
-                        // Mark this occurrance as a duplicate and skip adding it to finalItemList.
-                        this.#sendPayloadStatusUpdate([
-                            {
+                    for (const payload of response.payloads) {
+                        if (
+                            finalItemList.find(
+                                (item) => item.payload_id === payload.payload_id
+                            )
+                        ) {
+                            // The payload ID was already placed into the finalItemList array.
+                            // Mark this occurrance as a duplicate and skip adding it to finalItemList.
+                            this.#sendPayloadStatusUpdate([
+                                {
+                                    payload_id: payload.payload_id,
+                                    status: "duplicate",
+                                    event_timestamp: new Date().getTime(),
+                                },
+                            ]);
+                        } else {
+                            // The payload ID was not found in finalItemList, so add it.
+                            const detailedItemList = [];
+
+                            for (const itemData of payload.detailed_list_items) {
+                                detailedItemList.push({
+                                    product_title: itemData["product_title"],
+                                    product_brand: itemData["product_brand"],
+                                    product_category:
+                                        itemData["product_category"],
+                                    product_barcode:
+                                        itemData["product_barcode"],
+                                    product_discount:
+                                        itemData["product_discount"],
+                                    product_image: itemData["product_image"],
+                                    product_sku: itemData["product_sku"],
+                                });
+                            }
+
+                            finalItemList.push({
                                 payload_id: payload.payload_id,
-                                status: "duplicate",
-                                event_timestamp: new Date().getTime(),
-                            },
-                        ]);
-                    } else {
-                        // The payload ID was not found in finalItemList, so add it.
-                        const detailedItemList = [];
-
-                        for (const itemData of payload.detailed_list_items) {
-                            detailedItemList.push({
-                                product_title: itemData["product_title"],
-                                product_brand: itemData["product_brand"],
-                                product_category: itemData["product_category"],
-                                product_barcode: itemData["product_barcode"],
-                                product_discount: itemData["product_discount"],
-                                product_image: itemData["product_image"],
-                                product_sku: itemData["product_sku"],
+                                detailed_list_items: detailedItemList,
                             });
                         }
-
-                        finalItemList.push({
-                            payload_id: payload.payload_id,
-                            detailed_list_items: detailedItemList,
-                        });
                     }
-                }
 
-                // Send the items to the client, so they can add them to the list.
-                this.onPayloadsAvailable(finalItemList);
-            },
-            onError: () => {
-                console.error(
-                    "An error occurred while requesting payload item data."
-                );
-            },
-        });
+                    // Send the items to the client, so they can add them to the list.
+                    this.onPayloadsAvailable(finalItemList);
+                },
+                onError: () => {
+                    console.error(
+                        "An error occurred while requesting payload item data."
+                    );
+                },
+            });
+        }
     }
 
     /**

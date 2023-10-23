@@ -8,6 +8,8 @@ declare class AdadaptedJsSdk {
     bundleId: string;
     bundleVersion: string;
     allowRetargeting: boolean;
+    enablePayloads: boolean;
+    enableKeywordIntercept: boolean;
     zonePlacements: any;
     apiEnv: string;
     listManagerApiEnv: string;
@@ -146,6 +148,14 @@ declare namespace AdadaptedJsSdk {
          * Allow ad retargeting.
          */
         allowRetargeting: boolean;
+        /**
+         * Enables the ability to retrieve user payloads.
+         */
+        enablePayloads?: boolean;
+        /**
+         * Enables the ability to retrieve keyword intercepts.
+         */
+        enableKeywordIntercept?: boolean;
         /**
          * The unique bundle ID used to identify the user.
          */
