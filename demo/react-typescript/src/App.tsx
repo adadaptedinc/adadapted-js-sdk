@@ -260,83 +260,95 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "0A2C2F0X63E5093E", // eGrowcery - Kuhn's
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102135",
+    //             width: 956,
+    //             height: 190,
+    //         },
+    //         // {
+    //         //     zoneId: "102136",
+    //         //     width: 360,
+    //         //     height: 100,
+    //         // },
+    //     ],
+    // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "CE60A70X6480D077",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102151",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102150",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102161",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "CE60A70X6480D077",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102150",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102151",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "CE60A70X6480D077",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102161",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102151",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102150",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "0A2C2F0X63E5093E", // eGrowcery - Kuhn's
+        apiKey: "NWZHZWYWN2U2ODBH",
         zonePlacements: [
             {
-                zoneId: "102135",
-                width: 956,
-                height: 190,
+                zoneId: "101953",
+                width: 360,
+                height: 100,
             },
-            // {
-            //     zoneId: "102136",
-            //     width: 360,
-            //     height: 100,
-            // },
         ],
     };
-
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102150",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102161",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //     ],
-    // };
-
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102150",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //     ],
-    // };
-
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102161",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102150",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //     ],
-    // };
 
     const sdk = new AdadaptedJsSdk();
 
@@ -595,11 +607,13 @@ export const App: FC = (): ReactElement => {
                 apiKey: sdkAppDetails.apiKey,
                 advertiserId: "JS_SDK_TEST_USER_UDID",
                 allowRetargeting: true,
+                enablePayloads: true,
+                enableKeywordIntercept: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
-                params: {
-                    storeId: "477",
-                },
+                // params: {
+                //     storeId: "477",
+                // },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
                 },
