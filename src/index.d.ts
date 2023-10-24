@@ -57,7 +57,7 @@ declare class AdadaptedJsSdk {
      * @returns all keyword intercept terms that matched the search term.
      */
     performKeywordSearch(
-        searchTerm: string
+        searchTerm: string,
     ): AdadaptedJsSdk.KeywordSearchTerm[];
     /**
      * Client must trigger this method when a Keyword Intercept Term has been "selected" by the user.
@@ -114,7 +114,7 @@ declare class AdadaptedJsSdk {
      * @param payloadStatusList - The list of payload status objects to submit.
      */
     updatePayloadStatus(
-        payloadStatusList: AdadaptedJsSdk.PayloadStatus[]
+        payloadStatusList: AdadaptedJsSdk.PayloadStatus[],
     ): void;
     /**
      * Method that can be triggered to update the Store ID if you are targeting ads by store.
