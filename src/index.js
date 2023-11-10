@@ -94,7 +94,7 @@ class AdadaptedJsSdk {
             // Verify required fields are provided before attempting to initialize the SDK.
             if (props.apiKey === undefined || props.apiKey === null) {
                 reject(
-                    "App ID must be provided for the AdAdapted SDK to be initialized.",
+                    "API key must be provided for the AdAdapted SDK to be initialized.",
                 );
             } else if (
                 props.advertiserId === undefined ||
@@ -111,7 +111,7 @@ class AdadaptedJsSdk {
                     "A user's privacy decision to opt-in or opt-out for ad retargeting(allowRetargeting) must be provided for the AdAdapted SDK to be initialized.",
                 );
             } else {
-                // Set the app ID.
+                // Set the API key.
                 this.apiKey = props.apiKey;
 
                 // Set the unique ID.
@@ -146,11 +146,7 @@ class AdadaptedJsSdk {
                 // If the apiEnv value is not provided, production will be used as default.
                 this.apiEnvString = props.apiEnv;
 
-                if (props.apiEnv === "mock") {
-                    this.apiEnv = this.#ApiEnv.Mock;
-                    this.payloadApiEnv = this.#PayloadApiEnv.Mock;
-                    this.listManagerApiEnv = this.#ListManagerApiEnv.Mock;
-                } else if (props.apiEnv === "dev") {
+                if (props.apiEnv === "dev") {
                     this.apiEnv = this.#ApiEnv.Dev;
                     this.payloadApiEnv = this.#PayloadApiEnv.Dev;
                     this.listManagerApiEnv = this.#ListManagerApiEnv.Dev;
@@ -205,7 +201,7 @@ class AdadaptedJsSdk {
      */
     performKeywordSearch(searchTerm) {
         const finalResultListStartsWith = [];
-        const finalResultListContains = [];
+        // const finalResultListContains = [];
 
         this.keywordInterceptSearchValue = searchTerm;
 
@@ -248,9 +244,9 @@ class AdadaptedJsSdk {
             finalResultListStartsWith.sort((a, b) =>
                 a.priority > b.priority ? 1 : -1,
             );
-            finalResultListContains.sort((a, b) =>
-                a.priority > b.priority ? 1 : -1,
-            );
+            // finalResultListContains.sort((a, b) =>
+            //     a.priority > b.priority ? 1 : -1,
+            // );
 
             // If there are no events to report at this point,
             // we need to report the "not_matched" event.
@@ -267,7 +263,7 @@ class AdadaptedJsSdk {
 
             // Send up the "matched" event for the keyword search for
             // all terms that matched the users search.
-            this.#sendApiRequest({
+            this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
                 headers: [
@@ -298,7 +294,10 @@ class AdadaptedJsSdk {
         // terms found that didn't match the beginning of the string, but
         // still contained the search term will be concatenated to the end
         // of the list.
-        return finalResultListStartsWith.concat(finalResultListContains);
+        // return finalResultListStartsWith.concat(finalResultListContains);
+
+        // Only the strings that start with the search term will be returned currently.
+        return finalResultListStartsWith;
     }
 
     /**
@@ -311,11 +310,13 @@ class AdadaptedJsSdk {
     reportKeywordInterceptTermsPresented(termIds) {
         const termObjs = [];
 
-        for (const termId of termIds) {
-            const termObj = this.#getKeywordInterceptTerm(termId);
+        if (termIds) {
+            for (const termId of termIds) {
+                const termObj = this.#getKeywordInterceptTerm(termId);
 
-            if (termObj) {
-                termObjs.push(termObj);
+                if (termObj) {
+                    termObjs.push(termObj);
+                }
             }
         }
 
@@ -342,7 +343,7 @@ class AdadaptedJsSdk {
                 });
             }
 
-            this.#sendApiRequest({
+            this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
                 headers: [
@@ -384,7 +385,7 @@ class AdadaptedJsSdk {
         } else if (!termId || !termObj) {
             console.error("Invalid keyword intercept term ID provided.");
         } else {
-            this.#sendApiRequest({
+            this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
                 headers: [
@@ -433,6 +434,10 @@ class AdadaptedJsSdk {
             );
 
             this.lastSelectedATL = undefined;
+        } else {
+            console.error(
+                "An ATL ad must be selected by the user in order to acknowledge item being added to list.",
+            );
         }
     }
 
@@ -443,11 +448,17 @@ class AdadaptedJsSdk {
      * @param {string} cartId - The ID of the cart the items were placed within.
      */
     reportItemsAddedToCart(itemNames, cartId) {
-        this.#reportItemsAddedToListOrCart(
-            this.#ListManagerType.CART,
-            itemNames,
-            cartId,
-        );
+        if (itemNames && itemNames.length && cartId) {
+            this.#reportItemsAddedToListOrCart(
+                this.#ListManagerType.CART,
+                itemNames,
+                cartId,
+            );
+        } else {
+            console.error(
+                "Both cart ID and item names list must be provided in order to add items to cart.",
+            );
+        }
     }
 
     /**
@@ -505,7 +516,7 @@ class AdadaptedJsSdk {
             listName,
         );
 
-        this.#sendApiRequest({
+        this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
             headers: [
@@ -643,7 +654,7 @@ class AdadaptedJsSdk {
 
                     resolve();
                 } else {
-                    this.#sendApiRequest({
+                    this.#fetchApiRequest({
                         method: "POST",
                         url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
                         headers: [
@@ -675,12 +686,13 @@ class AdadaptedJsSdk {
                                 : undefined,
                         },
                         onSuccess: (response) => {
+                            const result = JSON.parse(response);
                             const sessionJson = JSON.stringify({
                                 storeId:
                                     this.params && this.params.storeId
                                         ? this.params.storeId
                                         : null,
-                                session: response,
+                                session: result,
                             });
 
                             try {
@@ -695,11 +707,11 @@ class AdadaptedJsSdk {
                                 );
                             }
 
-                            this.sessionId = response.session_id;
-                            this.sessionInfo = response;
+                            this.sessionId = result.session_id;
+                            this.sessionInfo = result;
 
                             // Render the Ad Zones.
-                            this.#renderAdZones(response.zones);
+                            this.#renderAdZones(result.zones);
 
                             // Start the session refresh timer.
                             this.#createSessionRefreshTimer();
@@ -719,11 +731,26 @@ class AdadaptedJsSdk {
                             resolve();
                         },
                         onError: () => {
+                            // Make sure any previous reference to the session is cleared here to avoid
+                            // reuse of incorrect session data upon the next successful initialization.
+                            this.#clearLocalStorageSessionData();
+
                             reject("An error occurred initializing the SDK.");
                         },
                     });
                 }
             });
+        });
+    }
+
+    /**
+     * Clears the local storage session data.
+     */
+    #clearLocalStorageSessionData() {
+        this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
+            localStorage.removeItem(
+                `aa-session-${this.apiEnvString}-${hashedApiKey}`,
+            );
         });
     }
 
@@ -793,10 +820,10 @@ class AdadaptedJsSdk {
         this.refreshSessionTimer = setTimeout(() => {
             this.#initializeSession()
                 .then(() => {
-                    resolve();
+                    // Do nothing upon successful session refresh.
                 })
                 .catch((errorMessage) => {
-                    reject(errorMessage);
+                    console.error(errorMessage);
                 });
         }, totalMillisecondsUntilExpire - 60000);
     }
@@ -835,14 +862,14 @@ class AdadaptedJsSdk {
             // Refresh the session instead of just refreshing ads.
             this.#initializeSession()
                 .then(() => {
-                    resolve();
+                    // Do nothing upon successful session refresh.
                 })
                 .catch((errorMessage) => {
-                    reject(errorMessage);
+                    console.error(errorMessage);
                 });
         } else {
             // We have a valid session still, so just refresh the ads.
-            this.#sendApiRequest({
+            this.#fetchApiRequest({
                 method: "GET",
                 url: `${this.apiEnv}/v/0.9.5/${
                     this.deviceOs
@@ -932,7 +959,7 @@ class AdadaptedJsSdk {
      * @param {Array} payloadStatusList - The list of payload status objects to submit.
      */
     #sendPayloadStatusUpdate(payloadStatusList) {
-        this.#sendApiRequest({
+        this.#fetchApiRequest({
             method: "POST",
             url: `${this.payloadApiEnv}/v/1/tracking`,
             headers: [
@@ -1472,7 +1499,7 @@ class AdadaptedJsSdk {
             listName,
         );
 
-        this.#sendApiRequest({
+        this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
             headers: [
@@ -1508,7 +1535,7 @@ class AdadaptedJsSdk {
             listName,
         );
 
-        this.#sendApiRequest({
+        this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
             headers: [
@@ -1536,7 +1563,7 @@ class AdadaptedJsSdk {
         const currentTs = Math.round(new Date().getTime() / 1000);
 
         // Log the taken action/event with the API.
-        this.#sendApiRequest({
+        this.#fetchApiRequest({
             method: "POST",
             url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/events`,
             headers: [
@@ -1696,7 +1723,7 @@ class AdadaptedJsSdk {
      */
     #getKeywordIntercepts() {
         if (this.enableKeywordIntercept) {
-            this.#sendApiRequest({
+            this.#fetchApiRequest({
                 method: "GET",
                 url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
                 headers: [
@@ -1709,6 +1736,10 @@ class AdadaptedJsSdk {
                     this.keywordIntercepts = response;
                 },
                 onError: () => {
+                    // Make sure any previous reference to the session is cleared here to avoid
+                    // reuse of incorrect session data upon the next successful initialization.
+                    this.#clearLocalStorageSessionData();
+
                     console.error(
                         "An error occurred while retieving keyword intercepts.",
                     );
@@ -1741,7 +1772,7 @@ class AdadaptedJsSdk {
      */
     #requestPayloadItemData() {
         if (this.enablePayloads) {
-            this.#sendApiRequest({
+            this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.payloadApiEnv}/v/1/pickup`,
                 headers: [
@@ -1758,45 +1789,50 @@ class AdadaptedJsSdk {
                 onSuccess: (response) => {
                     const finalItemList = [];
 
-                    for (const payload of response.payloads) {
-                        if (
-                            finalItemList.find(
-                                (item) =>
-                                    item.payload_id === payload.payload_id,
-                            )
-                        ) {
-                            // The payload ID was already placed into the finalItemList array.
-                            // Mark this occurrance as a duplicate and skip adding it to finalItemList.
-                            this.#sendPayloadStatusUpdate([
-                                {
-                                    payload_id: payload.payload_id,
-                                    status: "duplicate",
-                                    event_timestamp: new Date().getTime(),
-                                },
-                            ]);
-                        } else {
-                            // The payload ID was not found in finalItemList, so add it.
-                            const detailedItemList = [];
+                    if (response.payloads) {
+                        for (const payload of response.payloads) {
+                            if (
+                                finalItemList.find(
+                                    (item) =>
+                                        item.payload_id === payload.payload_id,
+                                )
+                            ) {
+                                // The payload ID was already placed into the finalItemList array.
+                                // Mark this occurrance as a duplicate and skip adding it to finalItemList.
+                                this.#sendPayloadStatusUpdate([
+                                    {
+                                        payload_id: payload.payload_id,
+                                        status: "duplicate",
+                                        event_timestamp: new Date().getTime(),
+                                    },
+                                ]);
+                            } else {
+                                // The payload ID was not found in finalItemList, so add it.
+                                const detailedItemList = [];
 
-                            for (const itemData of payload.detailed_list_items) {
-                                detailedItemList.push({
-                                    product_title: itemData["product_title"],
-                                    product_brand: itemData["product_brand"],
-                                    product_category:
-                                        itemData["product_category"],
-                                    product_barcode:
-                                        itemData["product_barcode"],
-                                    product_discount:
-                                        itemData["product_discount"],
-                                    product_image: itemData["product_image"],
-                                    product_sku: itemData["product_sku"],
+                                for (const itemData of payload.detailed_list_items) {
+                                    detailedItemList.push({
+                                        product_title:
+                                            itemData["product_title"],
+                                        product_brand:
+                                            itemData["product_brand"],
+                                        product_category:
+                                            itemData["product_category"],
+                                        product_barcode:
+                                            itemData["product_barcode"],
+                                        product_discount:
+                                            itemData["product_discount"],
+                                        product_image:
+                                            itemData["product_image"],
+                                        product_sku: itemData["product_sku"],
+                                    });
+                                }
+
+                                finalItemList.push({
+                                    payload_id: payload.payload_id,
+                                    detailed_list_items: detailedItemList,
                                 });
                             }
-
-                            finalItemList.push({
-                                payload_id: payload.payload_id,
-                                detailed_list_items: detailedItemList,
-                            });
                         }
                     }
 
@@ -1804,6 +1840,10 @@ class AdadaptedJsSdk {
                     this.onPayloadsAvailable(finalItemList);
                 },
                 onError: () => {
+                    // Make sure any previous reference to the session is cleared here to avoid
+                    // reuse of incorrect session data upon the next successful initialization.
+                    this.#clearLocalStorageSessionData();
+
                     console.error(
                         "An error occurred while requesting payload item data.",
                     );
@@ -1948,8 +1988,58 @@ class AdadaptedJsSdk {
         return false;
     }
 
+    // /**
+    //  * Handles sending an API request.
+    //  * @param {object} settings - All settings to apply to the request.
+    //  * @param {string} settings.method - The request method to use (GET, POST, etc.)
+    //  * @param {string} settings.url - The URL to use for the request.
+    //  * @param {Array} settings.headers - Array of all request header objects.
+    //  * @param {object} settings.requestPayload - All data to send on the body of the request.
+    //  * @param {Function} settings.onSuccess - The method that triggers upon successful result of the request.
+    //  * @param {Function} settings.onError - The method that triggers upon unsuccessful result of the request.
+    //  */
+    // #sendApiRequest(settings) {
+    //     const xhr = new XMLHttpRequest();
+
+    //     /**
+    //      * Method triggered upon request response.
+    //      */
+    //     xhr.onload = () => {
+    //         if (xhr.status >= 200 && xhr.status < 300) {
+    //             if (settings.onSuccess) {
+    //                 settings.onSuccess(JSON.parse(xhr.response));
+    //             }
+    //         } else {
+    //             if (settings.onError) {
+    //                 settings.onError();
+    //             }
+    //         }
+    //     };
+
+    //     /**
+    //      * Method triggered upon request error.
+    //      */
+    //     xhr.onerror = () => {
+    //         if (settings.onError) {
+    //             settings.onError();
+    //         }
+    //     };
+
+    //     xhr.open(settings.method, settings.url, true);
+
+    //     for (const header of settings.headers) {
+    //         xhr.setRequestHeader(header.name, header.value);
+    //     }
+
+    //     xhr.send(
+    //         settings.requestPayload
+    //             ? JSON.stringify(settings.requestPayload)
+    //             : undefined,
+    //     );
+    // }
+
     /**
-     * Handles sending an API request.
+     * Handles sending an API request with the fetch API.
      * @param {object} settings - All settings to apply to the request.
      * @param {string} settings.method - The request method to use (GET, POST, etc.)
      * @param {string} settings.url - The URL to use for the request.
@@ -1958,44 +2048,44 @@ class AdadaptedJsSdk {
      * @param {Function} settings.onSuccess - The method that triggers upon successful result of the request.
      * @param {Function} settings.onError - The method that triggers upon unsuccessful result of the request.
      */
-    #sendApiRequest(settings) {
-        const xhr = new XMLHttpRequest();
+    #fetchApiRequest(settings) {
+        let headersData;
+        let bodyData;
 
-        /**
-         * Method triggered upon request response.
-         */
-        xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                if (settings.onSuccess) {
-                    settings.onSuccess(JSON.parse(xhr.response));
-                }
-            } else {
-                if (settings.onError) {
-                    settings.onError();
-                }
+        // Set the headers if needed.
+        if (settings.headers) {
+            headersData = {};
+
+            for (const header of settings.headers) {
+                headersData[header.name] = header.value;
             }
-        };
-
-        /**
-         * Method triggered upon request error.
-         */
-        xhr.onerror = () => {
-            if (settings.onError) {
-                settings.onError();
-            }
-        };
-
-        xhr.open(settings.method, settings.url, true);
-
-        for (const header of settings.headers) {
-            xhr.setRequestHeader(header.name, header.value);
         }
 
-        xhr.send(
-            settings.requestPayload
-                ? JSON.stringify(settings.requestPayload)
-                : undefined,
-        );
+        // Set the body data if needed.
+        if (settings.requestPayload) {
+            bodyData = JSON.stringify(settings.requestPayload);
+        }
+
+        // Trigger the request.
+        fetch(settings.url, {
+            method: settings.method,
+            headers: headersData,
+            body: bodyData,
+        })
+            .then(async (response) => {
+                const dataResponse = await response.json();
+
+                if (dataResponse.detail) {
+                    console.error(dataResponse.detail);
+                    settings.onError();
+                } else if (settings.onSuccess) {
+                    const sessionData = JSON.stringify(dataResponse);
+                    settings.onSuccess(sessionData);
+                }
+            })
+            .catch(() => {
+                settings.onError();
+            });
     }
 
     /**
@@ -2042,10 +2132,6 @@ class AdadaptedJsSdk {
          * The development API environment.
          */
         Dev: "https://sandbox.adadapted.com",
-        /**
-         * Used only for unit testing/mocking data.
-         */
-        Mock: "MOCK_DATA",
     };
 
     /**
@@ -2060,10 +2146,6 @@ class AdadaptedJsSdk {
          * The development API environment.
          */
         Dev: "https://sandec.adadapted.com",
-        /**
-         * Used only for unit testing/mocking data.
-         */
-        Mock: "MOCK_DATA",
     };
 
     /**
@@ -2078,10 +2160,6 @@ class AdadaptedJsSdk {
          * The development API environment.
          */
         Dev: "https://sandpayload.adadapted.com",
-        /**
-         * Used only for unit testing/mocking data.
-         */
-        Mock: "MOCK_DATA",
     };
 
     /**
