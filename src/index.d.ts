@@ -102,13 +102,13 @@ declare class AdadaptedJsSdk {
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsDeletedFromList(itemNames: string[], listName: string): void;
+    reportItemsDeletedFromList(itemNames: string[], listName?: string): void;
     /**
      * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsCrossedOffList(itemNames: string[], listName: string): void;
+    reportItemsCrossedOffList(itemNames: string[], listName?: string): void;
     /**
      * This method should be triggered when payloads have been delivered or rejected.
      * This method accepts a list of payloads to enable performing this action as a batch operation if desired.

@@ -221,27 +221,27 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
-    const sdkAppDetails: SdkDetails = {
-        apiEnv: "dev",
-        apiKey: "NJIXNMRHZDC5ODCY",
-        zonePlacements: [
-            {
-                zoneId: "102004",
-                width: 640,
-                height: 200,
-            },
-            {
-                zoneId: "101991",
-                width: 640,
-                height: 200,
-            },
-            {
-                zoneId: "101990",
-                width: 1200,
-                height: 627,
-            },
-        ],
-    };
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "prod",
+    //     apiKey: "NJIXNMRHZDC5ODCY",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102004",
+    //             width: 640,
+    //             height: 200,
+    //         },
+    //         {
+    //             zoneId: "101991",
+    //             width: 640,
+    //             height: 200,
+    //         },
+    //         {
+    //             zoneId: "101990",
+    //             width: 1200,
+    //             height: 627,
+    //         },
+    //     ],
+    // };
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "prod",
@@ -316,27 +316,27 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "prod",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102161",
-    //             width: 300,
-    //             height: 250,
-    //         },
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 200,
-    //         },
-    //         {
-    //             zoneId: "102150",
-    //             width: 300,
-    //             height: 250,
-    //         },
-    //     ],
-    // };
+    const sdkAppDetails: SdkDetails = {
+        apiEnv: "prod",
+        apiKey: "CE60A70X6480D077",
+        zonePlacements: [
+            {
+                zoneId: "102161",
+                width: 300,
+                height: 250,
+            },
+            {
+                zoneId: "102151",
+                width: 360,
+                height: 200,
+            },
+            {
+                zoneId: "102150",
+                width: 300,
+                height: 250,
+            },
+        ],
+    };
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "dev",

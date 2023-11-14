@@ -83,6 +83,10 @@ describe("AdadaptedJsSdk", () => {
             type: "",
         },
     };
+    const testCartId = "TEST_CART_ID";
+    const testListName = "TEST_LIST_NAME";
+    const testItemNames = ["ITEM_NAME_1", "ITEM_NAME_2", "ITEM_NAME_3"];
+    const testStoreId = "TEST_STORE_ID";
 
     let sdk: AdadaptedJsSdk | null = null;
 
@@ -686,9 +690,6 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("reportItemsAddedToCart()", () => {
-        const testCartId = "TEST_CART_ID";
-        const testItemNames = ["ITEM_NAME_1", "ITEM_NAME_2", "ITEM_NAME_3"];
-
         test("itemNames is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
@@ -697,7 +698,7 @@ describe("AdadaptedJsSdk", () => {
             testSdk.reportItemsAddedToCart(undefined, testCartId);
 
             expect(consoleErrorSpy).toBeCalledWith(
-                "Both cart ID and item names list must be provided in order to add items to cart.",
+                "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         });
 
@@ -708,7 +709,7 @@ describe("AdadaptedJsSdk", () => {
             testSdk.reportItemsAddedToCart([], testCartId);
 
             expect(consoleErrorSpy).toBeCalledWith(
-                "Both cart ID and item names list must be provided in order to add items to cart.",
+                "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         });
 
@@ -719,11 +720,11 @@ describe("AdadaptedJsSdk", () => {
             testSdk.reportItemsAddedToCart(testItemNames, "");
 
             expect(consoleErrorSpy).toBeCalledWith(
-                "Both cart ID and item names list must be provided in order to add items to cart.",
+                "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         });
 
-        test("API request to add items to list fails", async () => {
+        test("API request to report adding items to cart fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -737,11 +738,11 @@ describe("AdadaptedJsSdk", () => {
 
             expect(fetch).toHaveBeenCalled();
             expect(consoleErrorSpy).toBeCalledWith(
-                `An error occurred while reporting an item "user_added_to_cart\" event.`,
+                `An error occurred while reporting an item "user_added_to_cart" event.`,
             );
         });
 
-        test("lastSelectedATL is defined and the request succeeds", async () => {
+        test("API request to report adding items to cart succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -761,5 +762,414 @@ describe("AdadaptedJsSdk", () => {
                 }),
             );
         });
+    });
+
+    describe("reportItemsDeletedFromCart()", () => {
+        test("itemNames is undefined", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            // @ts-ignore
+            testSdk.reportItemsDeletedFromCart(undefined, testCartId);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "Both cart ID and item names list must be provided in order to report deleting items from cart.",
+            );
+        });
+
+        test("itemNames is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsDeletedFromCart([], testCartId);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "Both cart ID and item names list must be provided in order to report deleting items from cart.",
+            );
+        });
+
+        test("cartId is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsDeletedFromCart(testItemNames, "");
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "Both cart ID and item names list must be provided in order to report deleting items from cart.",
+            );
+        });
+
+        test("API request to report deleting items from cart fails", async () => {
+            // @ts-ignore
+            global.fetch = jest.fn(() => Promise.reject());
+
+            const flushPromises = () => new Promise(setImmediate);
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsDeletedFromCart(testItemNames, testCartId);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(consoleErrorSpy).toBeCalledWith(
+                `An error occurred while reporting an item "user_deleted_from_cart" event.`,
+            );
+        });
+
+        test("API request to report deleting items from cart succeeds", async () => {
+            const flushPromises = () => new Promise(setImmediate);
+            const testSdk = sdk!;
+            testSdk.deviceOs = "android";
+            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            testSdk.reportItemsDeletedFromCart(testItemNames, testCartId);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(fetch).toHaveBeenCalledWith(
+                "https://ec.adadapted.com/v/1/android/events",
+                expect.objectContaining({
+                    body: expect.stringContaining(
+                        `"udid":"${testSdk.advertiserId}"`,
+                    ),
+                }),
+            );
+        });
+    });
+
+    describe("reportItemsAddedToList()", () => {
+        test("itemNames is undefined", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            // @ts-ignore
+            testSdk.reportItemsAddedToList(undefined);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The item names list must be provided in order to add items to list.",
+            );
+        });
+
+        test("itemNames is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsAddedToList([]);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The item names list must be provided in order to add items to list.",
+            );
+        });
+
+        test("API request to report adding items to list fails", async () => {
+            // @ts-ignore
+            global.fetch = jest.fn(() => Promise.reject());
+
+            const flushPromises = () => new Promise(setImmediate);
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsAddedToList(testItemNames, testListName);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(consoleErrorSpy).toBeCalledWith(
+                `An error occurred while reporting an item "user_added_to_list" event.`,
+            );
+        });
+
+        test("API request to report adding items to list succeeds", async () => {
+            const flushPromises = () => new Promise(setImmediate);
+            const testSdk = sdk!;
+            testSdk.deviceOs = "android";
+            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            testSdk.reportItemsAddedToList(testItemNames, testListName);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(fetch).toHaveBeenCalledWith(
+                "https://ec.adadapted.com/v/1/android/events",
+                expect.objectContaining({
+                    body: expect.stringContaining(
+                        `"udid":"${testSdk.advertiserId}"`,
+                    ),
+                }),
+            );
+        });
+    });
+
+    describe("reportItemsDeletedFromList()", () => {
+        test("itemNames is undefined", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            // @ts-ignore
+            testSdk.reportItemsDeletedFromList(undefined);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The item names list must be provided in order to delete items from list.",
+            );
+        });
+
+        test("itemNames is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsDeletedFromList([]);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The item names list must be provided in order to delete items from list.",
+            );
+        });
+
+        test("API request to report deleting items from list fails", async () => {
+            // @ts-ignore
+            global.fetch = jest.fn(() => Promise.reject());
+
+            const flushPromises = () => new Promise(setImmediate);
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsDeletedFromList(testItemNames, testListName);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(consoleErrorSpy).toBeCalledWith(
+                `An error occurred while reporting an item "user_deleted_from_list" event.`,
+            );
+        });
+
+        test("API request to report deleting items from list succeeds", async () => {
+            const flushPromises = () => new Promise(setImmediate);
+            const testSdk = sdk!;
+            testSdk.deviceOs = "android";
+            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            testSdk.reportItemsDeletedFromList(testItemNames, testListName);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(fetch).toHaveBeenCalledWith(
+                "https://ec.adadapted.com/v/1/android/events",
+                expect.objectContaining({
+                    body: expect.stringContaining(
+                        `"udid":"${testSdk.advertiserId}"`,
+                    ),
+                }),
+            );
+        });
+    });
+
+    describe("reportItemsCrossedOffList()", () => {
+        test("itemNames is undefined", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            // @ts-ignore
+            testSdk.reportItemsCrossedOffList(undefined);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The item names list must be provided in order to cross off items from list.",
+            );
+        });
+
+        test("itemNames is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsCrossedOffList([]);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The item names list must be provided in order to cross off items from list.",
+            );
+        });
+
+        test("API request to report deleting items from list fails", async () => {
+            // @ts-ignore
+            global.fetch = jest.fn(() => Promise.reject());
+
+            const flushPromises = () => new Promise(setImmediate);
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.reportItemsCrossedOffList(testItemNames, testListName);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(consoleErrorSpy).toBeCalledWith(
+                `An error occurred while reporting an item "user_crossed_off_list" event.`,
+            );
+        });
+
+        test("API request to report deleting items from list succeeds", async () => {
+            const flushPromises = () => new Promise(setImmediate);
+            const testSdk = sdk!;
+            testSdk.deviceOs = "android";
+            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            testSdk.reportItemsCrossedOffList(testItemNames, testListName);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(fetch).toHaveBeenCalledWith(
+                "https://ec.adadapted.com/v/1/android/events",
+                expect.objectContaining({
+                    body: expect.stringContaining(
+                        `"udid":"${testSdk.advertiserId}"`,
+                    ),
+                }),
+            );
+        });
+    });
+
+    describe("updatePayloadStatus()", () => {
+        const testPayloadStatusList: AdadaptedJsSdk.PayloadStatus[] = [
+            {
+                payload_id: "TEST_PAYLOAD_1",
+                status: "delivered",
+            },
+            {
+                payload_id: "TEST_PAYLOAD_2",
+                status: "rejected",
+            },
+        ];
+
+        test("payloadStatusList is undefined", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            // @ts-ignore
+            testSdk.updatePayloadStatus(undefined);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The payload status list must be provided in order to update the payload(s) status.",
+            );
+        });
+
+        test("payloadStatusList is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.updatePayloadStatus([]);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The payload status list must be provided in order to update the payload(s) status.",
+            );
+        });
+
+        test("API request to update payload status fails", async () => {
+            // @ts-ignore
+            global.fetch = jest.fn(() => Promise.reject());
+
+            const flushPromises = () => new Promise(setImmediate);
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.updatePayloadStatus(testPayloadStatusList);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(consoleErrorSpy).toBeCalledWith(
+                `An error occurred while updating payload status.`,
+            );
+        });
+
+        test("API request to update payload status succeeds", async () => {
+            const flushPromises = () => new Promise(setImmediate);
+            const testSdk = sdk!;
+            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            testSdk.updatePayloadStatus(testPayloadStatusList);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(fetch).toHaveBeenCalledWith(
+                "https://payload.adadapted.com/v/1/tracking",
+                expect.objectContaining({
+                    body: expect.stringContaining(
+                        `"udid":"${testSdk.advertiserId}"`,
+                    ),
+                }),
+            );
+        });
+    });
+
+    describe("updateStoreId", () => {
+        test("newStoreId is undefined", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            // @ts-ignore
+            testSdk.updateStoreId(undefined);
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The store ID must be provided in order to update the SDK to use it.",
+            );
+        });
+
+        test("newStoreId is empty", () => {
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.updateStoreId("");
+
+            expect(consoleErrorSpy).toBeCalledWith(
+                "The store ID must be provided in order to update the SDK to use it.",
+            );
+        });
+
+        test("API request to refresh ad zones after changing the store ID fails while trying to initialize the session", async () => {
+            // @ts-ignore
+            global.fetch = jest.fn(() => Promise.reject());
+
+            const flushPromises = () => new Promise(setImmediate);
+            const consoleErrorSpy = jest.spyOn(console, "error");
+            const testSdk = sdk!;
+
+            testSdk.updateStoreId(testStoreId);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(consoleErrorSpy).toBeCalledWith(
+                `An error occurred initializing the SDK.`,
+            );
+        });
+
+        test("API request to refresh ad zones after changing the store ID succeeds while trying to initialize the session", async () => {
+            const flushPromises = () => new Promise(setImmediate);
+            const testSdk = sdk!;
+            testSdk.deviceOs = "android";
+            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            testSdk.updateStoreId(testStoreId);
+
+            await flushPromises();
+
+            expect(fetch).toHaveBeenCalled();
+            expect(fetch).toHaveBeenCalledWith(
+                "https://ads.adadapted.com/v/0.9.5/android/sessions/initialize",
+                expect.objectContaining({
+                    body: expect.stringContaining(
+                        `"udid":"${testSdk.advertiserId}"`,
+                    ),
+                }),
+            );
+        });
+    });
+
+    describe("unmount()", () => {
+        test("", () => {});
     });
 });

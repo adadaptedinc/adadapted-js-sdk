@@ -456,7 +456,7 @@ class AdadaptedJsSdk {
             );
         } else {
             console.error(
-                "Both cart ID and item names list must be provided in order to add items to cart.",
+                "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         }
     }
@@ -468,11 +468,17 @@ class AdadaptedJsSdk {
      * @param {string} cartId - The ID of the cart the items were placed within.
      */
     reportItemsDeletedFromCart(itemNames, cartId) {
-        this.#reportItemsDeletedFromListOrCart(
-            this.#ListManagerType.CART,
-            itemNames,
-            cartId,
-        );
+        if (itemNames && itemNames.length && cartId) {
+            this.#reportItemsDeletedFromListOrCart(
+                this.#ListManagerType.CART,
+                itemNames,
+                cartId,
+            );
+        } else {
+            console.error(
+                "Both cart ID and item names list must be provided in order to report deleting items from cart.",
+            );
+        }
     }
 
     /**
@@ -482,11 +488,17 @@ class AdadaptedJsSdk {
      * @param {string} listName - (optional) The list to associate the items with, if available.
      */
     reportItemsAddedToList(itemNames, listName) {
-        this.#reportItemsAddedToListOrCart(
-            this.#ListManagerType.LIST,
-            itemNames,
-            listName,
-        );
+        if (itemNames && itemNames.length) {
+            this.#reportItemsAddedToListOrCart(
+                this.#ListManagerType.LIST,
+                itemNames,
+                listName,
+            );
+        } else {
+            console.error(
+                "The item names list must be provided in order to add items to list.",
+            );
+        }
     }
 
     /**
@@ -496,11 +508,17 @@ class AdadaptedJsSdk {
      * @param {string} listName - (optional) The list the items are associated with, if available.
      */
     reportItemsDeletedFromList(itemNames, listName) {
-        this.#reportItemsDeletedFromListOrCart(
-            this.#ListManagerType.LIST,
-            itemNames,
-            listName,
-        );
+        if (itemNames && itemNames.length) {
+            this.#reportItemsDeletedFromListOrCart(
+                this.#ListManagerType.LIST,
+                itemNames,
+                listName,
+            );
+        } else {
+            console.error(
+                "The item names list must be provided in order to delete items from list.",
+            );
+        }
     }
 
     /**
@@ -510,30 +528,36 @@ class AdadaptedJsSdk {
      * @param {string} listName - (optional) The list the items are associated with, if available.
      */
     reportItemsCrossedOffList(itemNames, listName) {
-        const requestPayload = this.#getListManagerApiRequestData(
-            this.#ListManagerEventName.CROSSED_OFF_LIST,
-            itemNames,
-            listName,
-        );
+        if (itemNames && itemNames.length) {
+            const requestPayload = this.#getListManagerApiRequestData(
+                this.#ListManagerEventName.CROSSED_OFF_LIST,
+                itemNames,
+                listName,
+            );
 
-        this.#fetchApiRequest({
-            method: "POST",
-            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
-            headers: [
-                {
-                    name: "accept",
-                    value: "application/json",
+            this.#fetchApiRequest({
+                method: "POST",
+                url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                ],
+                requestPayload,
+                onError: () => {
+                    console.error(
+                        `An error occurred while reporting an item "${
+                            this.#ListManagerEventName.CROSSED_OFF_LIST
+                        }" event.`,
+                    );
                 },
-            ],
-            requestPayload,
-            onError: () => {
-                console.error(
-                    `An error occurred while reporting an item "${
-                        this.#ListManagerEventName.CROSSED_OFF_LIST
-                    }" event.`,
-                );
-            },
-        });
+            });
+        } else {
+            console.error(
+                "The item names list must be provided in order to cross off items from list.",
+            );
+        }
     }
 
     /**
@@ -542,19 +566,25 @@ class AdadaptedJsSdk {
      * @param {Array} payloadStatusList - The list of payload status objects to submit.
      */
     updatePayloadStatus(payloadStatusList) {
-        // The event timestamp has to be sent as a unix timestamp.
-        const currentTsMilliseconds = new Date().getTime();
-        const finalPayloadStatusList = [];
+        if (payloadStatusList && payloadStatusList.length) {
+            // The event timestamp has to be sent as a unix timestamp.
+            const currentTsMilliseconds = new Date().getTime();
+            const finalPayloadStatusList = [];
 
-        // Make sure each status update contains the current timestamp.
-        for (const payloadStatus of payloadStatusList) {
-            finalPayloadStatusList.push({
-                ...payloadStatus,
-                event_timestamp: currentTsMilliseconds,
-            });
+            // Make sure each status update contains the current timestamp.
+            for (const payloadStatus of payloadStatusList) {
+                finalPayloadStatusList.push({
+                    ...payloadStatus,
+                    event_timestamp: currentTsMilliseconds,
+                });
+            }
+
+            this.#sendPayloadStatusUpdate(finalPayloadStatusList);
+        } else {
+            console.error(
+                "The payload status list must be provided in order to update the payload(s) status.",
+            );
         }
-
-        this.#sendPayloadStatusUpdate(finalPayloadStatusList);
     }
 
     /**
@@ -563,14 +593,20 @@ class AdadaptedJsSdk {
      * @param {string} newStoreId - The new store ID to use going forward.
      */
     updateStoreId(newStoreId) {
-        // Update the store ID.
-        this.params = {
-            ...this.params,
-            storeId: newStoreId,
-        };
+        if (newStoreId) {
+            // Update the store ID.
+            this.params = {
+                ...this.params,
+                storeId: newStoreId,
+            };
 
-        // Refresh the ad zones so the new store ID takes affect.
-        this.#refreshAdZones(true);
+            // Refresh the ad zones so the new store ID takes affect.
+            this.#refreshAdZones(true);
+        } else {
+            console.error(
+                "The store ID must be provided in order to update the SDK to use it.",
+            );
+        }
     }
 
     /**
@@ -1526,8 +1562,8 @@ class AdadaptedJsSdk {
     #reportItemsDeletedFromListOrCart(type, itemNames, listName) {
         const reportedEventType =
             type === this.#ListManagerType.CART
-                ? this.#ListManagerEventName.ADDED_TO_CART
-                : this.#ListManagerEventName.ADDED_TO_LIST;
+                ? this.#ListManagerEventName.DELETED_FROM_CART
+                : this.#ListManagerEventName.DELETED_FROM_LIST;
 
         const requestPayload = this.#getListManagerApiRequestData(
             reportedEventType,
@@ -1921,13 +1957,13 @@ class AdadaptedJsSdk {
     #getOperatingSystem() {
         const userAgent = navigator.userAgent || navigator.vendor;
 
-        // if (/iPad|iPhone|iPod/i.test(userAgent) && !window.MSStream) {
-        //     return this.#DeviceOS.IOS;
-        // } else if (/android/i.test(userAgent)) {
-        return this.#DeviceOS.ANDROID;
-        // } else {
-        //     return this.#DeviceOS.DESKTOP;
-        // }
+        if (/iPad|iPhone|iPod/i.test(userAgent) && !window.MSStream) {
+            return this.#DeviceOS.IOS;
+        } else if (/android/i.test(userAgent)) {
+            return this.#DeviceOS.ANDROID;
+        } else {
+            return this.#DeviceOS.DESKTOP;
+        }
     }
 
     /**
