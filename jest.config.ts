@@ -3,6 +3,7 @@ import type { Config } from "jest";
 export default async (): Promise<Config> => {
     return {
         verbose: true,
+        maxWorkers: 1,
         testEnvironment: "jsdom",
         testEnvironmentOptions: {
             url: "http://localhost",

@@ -317,7 +317,7 @@ export const App: FC = (): ReactElement => {
     // };
 
     const sdkAppDetails: SdkDetails = {
-        apiEnv: "prod",
+        apiEnv: "dev",
         apiKey: "CE60A70X6480D077",
         zonePlacements: [
             {

@@ -616,18 +616,21 @@ class AdadaptedJsSdk {
     unmount() {
         if (this.adZones && this.adZones.length) {
             for (const adZone of this.adZones) {
-                if (this.cycleAdTimers[adZone.id]) {
-                    clearTimeout(this.cycleAdTimers[adZone.id]);
+                if (this.cycleAdTimers[adZone.zoneId]) {
+                    clearTimeout(this.cycleAdTimers[adZone.zoneId]);
+                    this.cycleAdTimers[adZone.zoneId] = undefined;
                 }
             }
         }
 
         if (this.refreshAdZonesTimer) {
             clearTimeout(this.refreshAdZonesTimer);
+            this.refreshAdZonesTimer = undefined;
         }
 
         if (this.refreshSessionTimer) {
             clearTimeout(this.refreshSessionTimer);
+            this.refreshSessionTimer = undefined;
         }
     }
 
@@ -1955,15 +1958,16 @@ class AdadaptedJsSdk {
      * @returns the operating system
      */
     #getOperatingSystem() {
-        const userAgent = navigator.userAgent || navigator.vendor;
+        // TODO: Need to make the SDK operating system independent so each environment doesn't require its own path.
+        // const userAgent = navigator.userAgent || navigator.vendor;
 
-        if (/iPad|iPhone|iPod/i.test(userAgent) && !window.MSStream) {
-            return this.#DeviceOS.IOS;
-        } else if (/android/i.test(userAgent)) {
-            return this.#DeviceOS.ANDROID;
-        } else {
-            return this.#DeviceOS.DESKTOP;
-        }
+        // if (/iPad|iPhone|iPod/i.test(userAgent) && !window.MSStream) {
+        //     return this.#DeviceOS.IOS;
+        // } else if (/android/i.test(userAgent)) {
+        return this.#DeviceOS.ANDROID;
+        // } else {
+        //     return this.#DeviceOS.DESKTOP;
+        // }
     }
 
     /**
