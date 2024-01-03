@@ -4,6 +4,20 @@
  */
 import React, { FC, ReactElement, useState, useEffect } from "react";
 import "./App.scss";
+/**
+ * IMPORTANT:
+ * You must create a symlink to this package to run this locally.
+ * To do this, do the following:
+ *      - Navigate to the root folder "adadapted-js-sdk" in the command line.
+ *      - Run the following command:
+ *          - npm link
+ *      - Navigate to the root folder of the demo project "adadapted-js-sdk/demo/react-typescript"
+ *      - Run the following command:
+ *          - npm link @adadapted/js-sdk
+ * After performing the steps above, a simlink will be
+ * created so you can import the SDK into the demo project.
+ * https://docs.npmjs.com/cli/v10/commands/npm-link
+ */
 import AdadaptedJsSdk from "@adadapted/js-sdk/src";
 import TextField from "@mui/material/TextField";
 import {
@@ -222,7 +236,7 @@ export const App: FC = (): ReactElement => {
     // };
 
     // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
+    //     apiEnv: "prod",
     //     apiKey: "NJIXNMRHZDC5ODCY",
     //     zonePlacements: [
     //         {
@@ -260,95 +274,95 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "0A2C2F0X63E5093E", // eGrowcery - Kuhn's
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102135",
-    //             width: 956,
-    //             height: 190,
-    //         },
-    //         // {
-    //         //     zoneId: "102136",
-    //         //     width: 360,
-    //         //     height: 100,
-    //         // },
-    //     ],
-    // };
-
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102150",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102161",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //     ],
-    // };
-
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102150",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //     ],
-    // };
-
-    // const sdkAppDetails: SdkDetails = {
-    //     apiEnv: "dev",
-    //     apiKey: "CE60A70X6480D077",
-    //     zonePlacements: [
-    //         {
-    //             zoneId: "102161",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102151",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //         {
-    //             zoneId: "102150",
-    //             width: 360,
-    //             height: 100,
-    //         },
-    //     ],
-    // };
-
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "NWZHZWYWN2U2ODBH",
+        apiKey: "0A2C2F0X63E5093E", // eGrowcery - Kuhn's
         zonePlacements: [
             {
-                zoneId: "101953",
-                width: 360,
-                height: 100,
+                zoneId: "102135",
+                width: 956,
+                height: 190,
             },
+            // {
+            //     zoneId: "102136",
+            //     width: 360,
+            //     height: 100,
+            // },
         ],
     };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "CE60A70X6480D077",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102151",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102150",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102161",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "CE60A70X6480D077",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102150",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "102151",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "CE60A70X6480D077",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102161",
+    //             width: 300,
+    //             height: 250,
+    //         },
+    //         {
+    //             zoneId: "102151",
+    //             width: 360,
+    //             height: 200,
+    //         },
+    //         {
+    //             zoneId: "102150",
+    //             width: 300,
+    //             height: 250,
+    //         },
+    //     ],
+    // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "NWZHZWYWN2U2ODBH",
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "101953",
+    //             width: 360,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
 
     const sdk = new AdadaptedJsSdk();
 
@@ -611,9 +625,9 @@ export const App: FC = (): ReactElement => {
                 enableKeywordIntercept: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
-                // params: {
-                //     storeId: "477",
-                // },
+                params: {
+                    storeId: "230",
+                },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
                 },

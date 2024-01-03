@@ -31,6 +31,7 @@ declare class AdadaptedJsSdk {
     onAdZonesRefreshed: () => void;
     onAddItemsTriggered: () => void;
     onPayloadsAvailable: () => void;
+    onAdsRetrieved: () => void;
     /**
      * Gets the current session ID.
      * NOTE: This is only exposed for developer validation if needed.
@@ -101,13 +102,13 @@ declare class AdadaptedJsSdk {
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsDeletedFromList(itemNames: string[], listName: string): void;
+    reportItemsDeletedFromList(itemNames: string[], listName?: string): void;
     /**
      * Client must trigger this method when any items are crossed off a list for reports we provide to the client.
      * @param itemNames - The items to report.
      * @param listName - (optional) The list the items are associated with, if available.
      */
-    reportItemsCrossedOffList(itemNames: string[], listName: string): void;
+    reportItemsCrossedOffList(itemNames: string[], listName?: string): void;
     /**
      * This method should be triggered when payloads have been delivered or rejected.
      * This method accepts a list of payloads to enable performing this action as a batch operation if desired.
@@ -183,7 +184,7 @@ declare namespace AdadaptedJsSdk {
          * The API environment.
          * If undefined, defaults to production.
          */
-        apiEnv?: "prod" | "dev" | "mock";
+        apiEnv?: "prod" | "dev";
         /**
          * Additional params that can be provided when initializing a session.
          */
@@ -574,38 +575,40 @@ declare namespace AdadaptedJsSdk {
          */
         detailed_list_items: DetailedListItem[];
     }
-
-    /**
-     * Enum defining the available ad action types.
-     */
-    export enum AdActionType {
-        /**
-         * Used for Add To List.
-         */
-        CONTENT = "c",
-        /**
-         * Used for opening URLs in an external browser.
-         */
-        EXTERNAL = "e",
-        /**
-         * Used for opening URLs in a web view within the app.
-         * Works the same as {@link AdActionType.POPUP}.
-         * NOTE: This one should probably be deprecated with the new
-         *       platform redesign, since its not as obvious what it does.
-         */
-        LINK = "l",
-        /**
-         * Used for opening URLs in a web view within the app.
-         * Works the same as {@link AdActionType.LINK}.
-         */
-        POPUP = "p",
-        /**
-         * Used for opening app store URLs in the app store.
-         */
-        APP = "a",
-        /**
-         * ?
-         */
-        NONE = "n",
-    }
 }
+
+/**
+ * Enum defining the available ad action types.
+ */
+// export enum AdActionType {
+//     /**
+//      * Used for Add To List.
+//      */
+//     CONTENT = "c",
+//     /**
+//      * Used for opening URLs in an external browser.
+//      */
+//     EXTERNAL = "e",
+//     /**
+//      * Used for opening URLs in a web view within the app.
+//      * Works the same as {@link AdActionType.POPUP}.
+//      * NOTE: This one should probably be deprecated with the new
+//      *       platform redesign, since its not as obvious what it does.
+//      */
+//     LINK = "l",
+//     /**
+//      * Used for opening URLs in a web view within the app.
+//      * Works the same as {@link AdActionType.LINK}.
+//      */
+//     POPUP = "p",
+//     /**
+//      * Used for opening app store URLs in the app store.
+//      */
+//     APP = "a",
+//     /**
+//      * ?
+//      */
+//     NONE = "n",
+// }
+
+export type AdActionType = "c" | "e" | "l" | "p" | "a" | "n";
