@@ -271,6 +271,10 @@ class AdadaptedJsSdk {
                         name: "accept",
                         value: "application/json",
                     },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
+                    },
                 ],
                 requestPayload: {
                     app_id: this.apiKey,
@@ -351,6 +355,10 @@ class AdadaptedJsSdk {
                         name: "accept",
                         value: "application/json",
                     },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
+                    },
                 ],
                 requestPayload: {
                     app_id: this.apiKey,
@@ -392,6 +400,10 @@ class AdadaptedJsSdk {
                     {
                         name: "accept",
                         value: "application/json",
+                    },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
                     },
                 ],
                 requestPayload: {
@@ -543,6 +555,10 @@ class AdadaptedJsSdk {
                         name: "accept",
                         value: "application/json",
                     },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
+                    },
                 ],
                 requestPayload,
                 onError: () => {
@@ -610,6 +626,30 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Method that can be triggered to update the Recipe context ID.
+     * NOTE: Use this method when a new recipe is being shown.
+     * @param {string} newRecipeContextId - The new recipe context ID to use going forward.
+     * @param {string[]} newRecipContextZoneIds - The new recipe context zone IDs to use going forward.
+     */
+    updateRecipeContextId(newRecipeContextId, newRecipContextZoneIds) {
+        if (newRecipeContextId) {
+            // Update the recipe context ID.
+            this.params = {
+                ...this.params,
+                recipeContextId: newRecipeContextId,
+                recipeContextZoneIds: newRecipContextZoneIds,
+            };
+
+            // Refresh the ad zones so the new store ID takes affect.
+            this.#refreshAdZones(false);
+        } else {
+            console.error(
+                "The recipe context ID must be provided in order to update the SDK to use it.",
+            );
+        }
+    }
+
+    /**
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
      */
@@ -659,8 +699,30 @@ class AdadaptedJsSdk {
                             ? this.params.storeId
                             : null;
 
+                    const currentRecipeContextId =
+                        this.params && this.params.recipeContextId
+                            ? this.params.recipeContextId
+                            : null;
+
+                    const currentRecipeContextZoneIds =
+                        this.params && this.params.recipeContextZoneIds
+                            ? this.params.recipeContextZoneIds
+                            : null;
+
                     if (
                         parsedExistingSessionData.storeId === currentStoreId &&
+                        parsedExistingSessionData.recipeContextId ===
+                            currentRecipeContextId &&
+                        Array.isArray(
+                            parsedExistingSessionData.recipeContextZoneIds,
+                        ) &&
+                        Array.isArray(currentRecipeContextZoneIds) &&
+                        parsedExistingSessionData.recipeContextZoneIds
+                            .length === currentRecipeContextZoneIds.length &&
+                        parsedExistingSessionData.recipeContextZoneIds.every(
+                            (val, index) =>
+                                val === currentRecipeContextZoneIds[index],
+                        ) &&
                         this.#calculateRemainingSessionTimeUntilExpiration(
                             parsedExistingSession.session_expires_at,
                         ) > 0
@@ -705,6 +767,10 @@ class AdadaptedJsSdk {
                                 name: "Content-Type",
                                 value: "application/json",
                             },
+                            {
+                                name: "x-api-key",
+                                value: this.apiKey,
+                            },
                         ],
                         requestPayload: {
                             app_id: this.apiKey,
@@ -721,6 +787,15 @@ class AdadaptedJsSdk {
                                       store_id: this.params.storeId
                                           ? this.params.storeId
                                           : undefined,
+                                      context_id: this.params.recipeContextId
+                                          ? this.params.recipeContextId
+                                          : undefined,
+                                      context_zone_ids:
+                                          this.params.recipeContextZoneIds &&
+                                          this.params.recipeContextZoneIds
+                                              .length
+                                              ? this.params.recipeContextZoneIds
+                                              : undefined,
                                   }
                                 : undefined,
                         },
@@ -730,6 +805,15 @@ class AdadaptedJsSdk {
                                 storeId:
                                     this.params && this.params.storeId
                                         ? this.params.storeId
+                                        : null,
+                                recipeContextId:
+                                    this.params && this.params.recipeContextId
+                                        ? this.params.recipeContextId
+                                        : null,
+                                recipeContextZoneIds:
+                                    this.params &&
+                                    this.params.recipeContextZoneIds
+                                        ? this.params.recipeContextZoneIds
                                         : null,
                                 session: result,
                             });
@@ -887,13 +971,13 @@ class AdadaptedJsSdk {
 
     /**
      * Refreshes the content for all ad zones.
-     * @param isChangingStoreId - If true, the store ID has changed.
+     * @param requiresSessionInitialize - If true, it is required to re-initialize the session.
      */
-    #refreshAdZones(isChangingStoreId) {
+    #refreshAdZones(requiresSessionInitialize) {
         // Need to check if a session timeout has occurred first so
         // we don't try to refresh the ads with an invalid session.
         if (
-            isChangingStoreId ||
+            requiresSessionInitialize ||
             this.#calculateRemainingSessionTimeUntilExpiration(
                 this.sessionInfo.session_expires_at,
             ) <= 0
@@ -918,11 +1002,25 @@ class AdadaptedJsSdk {
                     this.params && this.params.storeId
                         ? `&storeID=${this.params.storeId}`
                         : ""
+                }${
+                    this.params && this.params.recipeContextId
+                        ? `&contextID=${this.params.recipeContextId}`
+                        : ""
+                }${
+                    this.params && this.params.recipeContextZoneIds
+                        ? `&zoneID=${this.params.recipeContextZoneIds.join(
+                              ",",
+                          )}`
+                        : ""
                 }`,
                 headers: [
                     {
                         name: "accept",
                         value: "application/json",
+                    },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
                     },
                 ],
                 onSuccess: (response) => {
@@ -1005,6 +1103,10 @@ class AdadaptedJsSdk {
                 {
                     name: "Content-Type",
                     value: "application/json",
+                },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
                 },
             ],
             requestPayload: {
@@ -1546,6 +1648,10 @@ class AdadaptedJsSdk {
                     name: "accept",
                     value: "application/json",
                 },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
+                },
             ],
             requestPayload,
             onError: () => {
@@ -1582,6 +1688,10 @@ class AdadaptedJsSdk {
                     name: "accept",
                     value: "application/json",
                 },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
+                },
             ],
             requestPayload,
             onError: () => {
@@ -1609,6 +1719,10 @@ class AdadaptedJsSdk {
                 {
                     name: "Content-Type",
                     value: "application/json",
+                },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
                 },
             ],
             requestPayload: {
@@ -1770,6 +1884,10 @@ class AdadaptedJsSdk {
                         name: "accept",
                         value: "application/json",
                     },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
+                    },
                 ],
                 onSuccess: (response) => {
                     this.keywordIntercepts = response;
@@ -1818,6 +1936,10 @@ class AdadaptedJsSdk {
                     {
                         name: "accept",
                         value: "application/json",
+                    },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
                     },
                 ],
                 requestPayload: {

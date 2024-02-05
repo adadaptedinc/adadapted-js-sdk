@@ -274,22 +274,22 @@ export const App: FC = (): ReactElement => {
     //     ],
     // };
 
-    const sdkAppDetails: SdkDetails = {
-        apiEnv: "dev",
-        apiKey: "0A2C2F0X63E5093E", // eGrowcery - Kuhn's
-        zonePlacements: [
-            {
-                zoneId: "102135",
-                width: 956,
-                height: 190,
-            },
-            // {
-            //     zoneId: "102136",
-            //     width: 360,
-            //     height: 100,
-            // },
-        ],
-    };
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "0A2C2F0X63E5093E", // eGrowcery - Kuhn's
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102135",
+    //             width: 956,
+    //             height: 190,
+    //         },
+    //         // {
+    //         //     zoneId: "102136",
+    //         //     width: 360,
+    //         //     height: 100,
+    //         // },
+    //     ],
+    // };
 
     // const sdkAppDetails: SdkDetails = {
     //     apiEnv: "dev",
@@ -363,6 +363,40 @@ export const App: FC = (): ReactElement => {
     //         },
     //     ],
     // };
+
+    // const sdkAppDetails: SdkDetails = {
+    //     apiEnv: "dev",
+    //     apiKey: "7D58810X6333241C", // AdAdapted - Android
+    //     zonePlacements: [
+    //         {
+    //             zoneId: "102110",
+    //             width: -1,
+    //             height: 100,
+    //         },
+    //         {
+    //             zoneId: "110002",
+    //             width: -1,
+    //             height: 100,
+    //         },
+    //     ],
+    // };
+
+    const sdkAppDetails: SdkDetails = {
+        apiEnv: "dev",
+        apiKey: "NJAZMDBKMDY3ODMY",
+        zonePlacements: [
+            {
+                zoneId: "102133",
+                width: 360,
+                height: 200,
+            },
+            {
+                zoneId: "102134",
+                width: 360,
+                height: 200,
+            },
+        ],
+    };
 
     const sdk = new AdadaptedJsSdk();
 
@@ -486,7 +520,7 @@ export const App: FC = (): ReactElement => {
                 let itemFound = false;
 
                 for (const listItem of finalListItems) {
-                    if (listItem.id === item.id) {
+                    if (listItem.id === item.id && listItem.name === item.name) {
                         listItem.quantity = listItem.quantity + 1;
 
                         itemFound = true;
@@ -536,7 +570,7 @@ export const App: FC = (): ReactElement => {
                 let itemFound = false;
 
                 for (const cartItem of finalCartItems) {
-                    if (cartItem.id === item.id) {
+                    if (cartItem.id === item.id && cartItem.name === item.name) {
                         cartItem.quantity = cartItem.quantity + 1;
 
                         itemFound = true;
@@ -626,7 +660,9 @@ export const App: FC = (): ReactElement => {
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
                 params: {
-                    storeId: "230",
+                    // storeId: "230",
+                    recipeContextId: "1167",
+                    recipeContextZoneIds: ["102133", "102134"],
                 },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);

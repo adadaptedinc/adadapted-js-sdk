@@ -124,6 +124,16 @@ declare class AdadaptedJsSdk {
      */
     updateStoreId(newStoreId: string): void;
     /**
+     * Method that can be triggered to update the Recipe context ID.
+     * NOTE: Use this method when a new recipe is being shown.
+     * @param {string} newRecipeContextId - The new recipe context ID to use going forward.
+     * @param {array} newRecipContextZoneIds - The new recipe context zone IDs to use going forward.
+     */
+    updateRecipeContextId(
+        newRecipeContextId: string,
+        newRecipContextZoneIds: string[],
+    ): void;
+    /**
      * Performs all clean up tasks for the SDK. Call this method when you are
      * finished with the SDK to ensure you don't experience memory leaks.
      */
@@ -220,7 +230,15 @@ declare namespace AdadaptedJsSdk {
         /**
          * The ID of the store you would like to target ads for.
          */
-        storeId: string;
+        storeId?: string;
+        /**
+         * The context ID of the recipe you would like to target ads for.
+         */
+        recipeContextId?: string;
+        /**
+         * The zone IDs that the recipe context will be applied to.
+         */
+        recipeContextZoneIds?: string[];
     }
 
     /**
