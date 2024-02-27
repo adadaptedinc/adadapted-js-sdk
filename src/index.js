@@ -195,6 +195,70 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Reports that a recipe has been loaded using the provided context.
+     * @param {string} recipeContextId - The recipe context ID that was used for the recipe load.
+     * @param {string[]} recipContextZoneIds - All zone IDs used to load ads for the recipe context ID.
+     */
+    reportRecipeLoaded(recipeContextId, recipContextZoneIds) {
+        if (
+            recipeContextId &&
+            recipContextZoneIds &&
+            recipContextZoneIds.length
+        ) {
+            const finalEventsList = [];
+            const currentTs = this.#getCurrentUnixTimestamp();
+
+            for (const zoneId of recipContextZoneIds) {
+                finalEventsList.push({
+                    event_source:
+                        this.deviceOs === this.#DeviceOS.DESKTOP
+                            ? this.#ListManagerEventSource.DESKTOP
+                            : this.#ListManagerEventSource.APP,
+                    event_name: "recipe_context",
+                    event_timestamp: currentTs,
+                    event_params: {
+                        context_id: recipeContextId,
+                        zone_id: zoneId,
+                    },
+                });
+            }
+
+            this.#fetchApiRequest({
+                method: "POST",
+                url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+                headers: [
+                    {
+                        name: "accept",
+                        value: "application/json",
+                    },
+                    {
+                        name: "x-api-key",
+                        value: this.apiKey,
+                    },
+                ],
+                requestPayload: {
+                    session_id: this.sessionId,
+                    app_id: this.apiKey,
+                    udid: this.advertiserId,
+                    events: finalEventsList,
+                    sdk_version: packageJson.version,
+                    bundle_id: this.bundleId,
+                    bundle_version: this.bundleVersion,
+                },
+                onError: () => {
+                    console.error(
+                        "An error occurred while reporting the recipe load event.",
+                    );
+                },
+            });
+        } else {
+            console.error(
+                "The recipe context ID and zone IDs list must be provided to report that a recipe loaded.",
+            );
+        }
+    }
+
+    /**
      * Searches through available ad keywords based on provided search term.
      * @param {string} searchTerm - The search term used to match against available keyword intercepts.
      * @returns all keyword intercept terms that matched the search term.
@@ -640,7 +704,10 @@ class AdadaptedJsSdk {
                 recipeContextZoneIds: newRecipContextZoneIds,
             };
 
-            // Refresh the ad zones so the new store ID takes affect.
+            // Track the the recipe load.
+            this.reportRecipeLoaded(newRecipeContextId, newRecipContextZoneIds);
+
+            // Refresh the ad zones so the new recipe context ID takes affect.
             this.#refreshAdZones(false);
         } else {
             console.error(
