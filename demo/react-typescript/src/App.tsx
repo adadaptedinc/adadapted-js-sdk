@@ -225,7 +225,7 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "7D58810X6333241C", // AdAdapted - Android
+        apiKey: "", // AdAdapted - Android
         zonePlacements: [
             {
                 zoneId: "102110",
@@ -502,7 +502,7 @@ export const App: FC = (): ReactElement => {
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
                 params: {
-                    // storeId: "230",
+                    // storeId: "311",
                     recipeContextId: "1167",
                     recipeContextZoneIds: ["102133", "102134"],
                 },
