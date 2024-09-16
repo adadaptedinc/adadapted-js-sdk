@@ -34,6 +34,7 @@ class AdadaptedJsSdk {
         this.scrollEventAbortController = undefined;
         this.adZoneCurrentAdImpressionTracker = {};
         this.params = undefined;
+        this.deviceLocale = undefined;
 
         /**
          * Triggered when the ad zone has refreshed.
@@ -145,6 +146,8 @@ class AdadaptedJsSdk {
                 // Set the API environments based on the provided override value.
                 // If the apiEnv value is not provided, production will be used as default.
                 this.apiEnvString = props.apiEnv;
+
+                this.deviceLocale = props.deviceLocale;
 
                 if (props.apiEnv === "dev") {
                     this.apiEnv = this.#ApiEnv.Dev;
@@ -848,6 +851,7 @@ class AdadaptedJsSdk {
                             bundle_id: this.bundleId,
                             bundle_version: this.bundleVersion,
                             allow_retargeting: this.allowRetargeting,
+                            device_locale: this.deviceLocale,
                             created_at: Math.floor(new Date().getTime() / 1000),
                             params: this.params
                                 ? {

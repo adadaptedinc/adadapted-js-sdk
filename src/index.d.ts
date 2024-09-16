@@ -26,6 +26,7 @@ declare class AdadaptedJsSdk {
     cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
     scrollEventAbortController: any;
+    deviceLocale: string;
     adZoneCurrentAdImpressionTracker: { [key: string]: boolean };
     params: { [key: string]: any };
     onAdZonesRefreshed: () => void;
@@ -195,6 +196,10 @@ declare namespace AdadaptedJsSdk {
          * If undefined, defaults to production.
          */
         apiEnv?: "prod" | "dev";
+        /**
+         * The locale of the device.
+         */
+        deviceLocale?: string;
         /**
          * Additional params that can be provided when initializing a session.
          */
