@@ -783,16 +783,21 @@ class AdadaptedJsSdk {
                         parsedExistingSessionData.storeId === currentStoreId &&
                         parsedExistingSessionData.recipeContextId ===
                             currentRecipeContextId &&
-                        Array.isArray(
-                            parsedExistingSessionData.recipeContextZoneIds,
-                        ) &&
-                        Array.isArray(currentRecipeContextZoneIds) &&
-                        parsedExistingSessionData.recipeContextZoneIds
-                            .length === currentRecipeContextZoneIds.length &&
-                        parsedExistingSessionData.recipeContextZoneIds.every(
-                            (val, index) =>
-                                val === currentRecipeContextZoneIds[index],
-                        ) &&
+                        (parsedExistingSessionData.recipeContextZoneIds ===
+                            null ||
+                            (Array.isArray(
+                                parsedExistingSessionData.recipeContextZoneIds,
+                            ) &&
+                                parsedExistingSessionData.recipeContextZoneIds
+                                    .length ===
+                                    currentRecipeContextZoneIds.length)) &&
+                        (currentRecipeContextZoneIds === null ||
+                            (Array.isArray(currentRecipeContextZoneIds) &&
+                                parsedExistingSessionData.recipeContextZoneIds.every(
+                                    (val, index) =>
+                                        val ===
+                                        currentRecipeContextZoneIds[index],
+                                ))) &&
                         this.#calculateRemainingSessionTimeUntilExpiration(
                             parsedExistingSession.session_expires_at,
                         ) > 0

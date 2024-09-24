@@ -1,7 +1,7 @@
 {
     "name": "@adadapted/js-sdk",
     "description": "The AdAdapted JS SDK.",
-    "version": "2.5.0",
+    "version": "2.5.1",
     "main": "src/index.js",
     "module": "src/index.js",
     "types": "src/**/*.d.ts",
@@ -26,14 +26,14 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://gitlab.com/adadapted/adadapted-js-sdk"
+        "url": "https://github.com/adadaptedinc/adadapted-js-sdk"
     },
-    "author": "Jeramy Usher <jusher@adadapted.com> (https://gitlab.com/adadapted/adadapted-js-sdk)",
+    "author": "Jeramy Usher <jusher@adadapted.com> (https://github.com/adadaptedinc/adadapted-js-sdk)",
     "license": "AdAdapted Platform License",
     "bugs": {
-        "url": "https://gitlab.com/adadapted/adadapted-js-sdk/issues"
+        "url": "https://github.com/adadaptedinc/adadapted-js-sdk/issues"
     },
-    "homepage": "https://gitlab.com/adadapted/adadapted-js-sdk#readme",
+    "homepage": "https://docs.adadapted.com/#/",
     "devDependencies": {
         "@babel/core": "^7.25.2",
         "@babel/plugin-transform-typescript": "^7.25.2",
