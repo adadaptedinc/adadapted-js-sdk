@@ -1100,10 +1100,10 @@ class AdadaptedJsSdk {
                     },
                 ],
                 onSuccess: (response) => {
-                    this.sessionInfo = response;
+                    this.sessionInfo = JSON.parse(response);
 
                     // Render the Ad Zones.
-                    this.#renderAdZones(response.zones);
+                    this.#renderAdZones(this.sessionInfo.zones);
 
                     // Call the user defined callback indicating
                     // the session data has been refreshed.
