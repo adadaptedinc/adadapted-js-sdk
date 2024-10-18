@@ -1067,59 +1067,67 @@ class AdadaptedJsSdk {
                     console.error(errorMessage);
                 });
         } else {
-            // We have a valid session still, so just refresh the ads.
-            this.#fetchApiRequest({
-                method: "GET",
-                url: `${this.apiEnv}/v/0.9.5/${
-                    this.deviceOs
-                }/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${
-                    this.advertiserId
-                }&sdk=${packageJson.version}${
-                    this.params && this.params.storeId
-                        ? `&storeID=${this.params.storeId}`
-                        : ""
-                }${
-                    this.params && this.params.recipeContextId
-                        ? `&contextID=${this.params.recipeContextId}`
-                        : ""
-                }${
-                    this.params && this.params.recipeContextZoneIds
-                        ? `&zoneID=${this.params.recipeContextZoneIds.join(
-                              ",",
-                          )}`
-                        : ""
-                }`,
-                headers: [
-                    {
-                        name: "accept",
-                        value: "application/json",
+            if (this.adZones && this.adZones.length > 0) {
+                // We have a valid session still, so just refresh the ads.
+                this.#fetchApiRequest({
+                    method: "GET",
+                    url: `${this.apiEnv}/v/0.9.5/${
+                        this.deviceOs
+                    }/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${
+                        this.advertiserId
+                    }&sdk=${packageJson.version}${
+                        this.params && this.params.storeId
+                            ? `&storeID=${this.params.storeId}`
+                            : ""
+                    }${
+                        this.params && this.params.recipeContextId
+                            ? `&contextID=${this.params.recipeContextId}`
+                            : ""
+                    }${
+                        this.params && this.params.recipeContextZoneIds
+                            ? `&zoneID=${this.params.recipeContextZoneIds.join(
+                                  ",",
+                              )}`
+                            : ""
+                    }`,
+                    headers: [
+                        {
+                            name: "accept",
+                            value: "application/json",
+                        },
+                        {
+                            name: "x-api-key",
+                            value: this.apiKey,
+                        },
+                    ],
+                    onSuccess: (response) => {
+                        this.sessionInfo = JSON.parse(response);
+
+                        // Render the Ad Zones.
+                        this.#renderAdZones(this.sessionInfo.zones);
+
+                        // Call the user defined callback indicating
+                        // the session data has been refreshed.
+                        this.onAdZonesRefreshed();
+
+                        // Start the timer again based on the new session data.
+                        this.#createRefreshAdZonesTimer();
                     },
-                    {
-                        name: "x-api-key",
-                        value: this.apiKey,
+                    onError: () => {
+                        console.error(
+                            "An error occurred refreshing the ad zones.",
+                        );
+
+                        // Start the timer again so we can make another
+                        // attempt to refresh the session data.
+                        this.#createRefreshAdZonesTimer();
                     },
-                ],
-                onSuccess: (response) => {
-                    this.sessionInfo = JSON.parse(response);
-
-                    // Render the Ad Zones.
-                    this.#renderAdZones(this.sessionInfo.zones);
-
-                    // Call the user defined callback indicating
-                    // the session data has been refreshed.
-                    this.onAdZonesRefreshed();
-
-                    // Start the timer again based on the new session data.
-                    this.#createRefreshAdZonesTimer();
-                },
-                onError: () => {
-                    console.error("An error occurred refreshing the ad zones.");
-
-                    // Start the timer again so we can make another
-                    // attempt to refresh the session data.
-                    this.#createRefreshAdZonesTimer();
-                },
-            });
+                });
+            } else {
+                // Start the timer again so we can make another
+                // attempt to refresh the session data.
+                this.#createRefreshAdZonesTimer();
+            }
         }
     }
 
