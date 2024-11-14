@@ -1328,6 +1328,16 @@ class AdadaptedJsSdk {
                     this.#isInViewport(containerElement) &&
                     !this.adZoneCurrentAdImpressionTracker[adZone.adZoneData.id]
                 ) {
+                    // Tell the tracking pixels within the iframe to load
+                    containerElement
+                        .getElementsByTagName("iframe")[0]
+                        .contentWindow.postMessage(
+                            {
+                                eventName: "aaSdkLoadAdUnitTrackingPixels",
+                            },
+                            "*",
+                        );
+
                     this.#triggerReportAdEvent(
                         adZone.adZoneData.ads[adZoneDisplayedAdIndex],
                         this.#ReportedEventType.IMPRESSION,
@@ -1857,6 +1867,16 @@ class AdadaptedJsSdk {
         this.adZoneCurrentAdImpressionTracker[adZoneData.id] = false;
 
         if (this.#isInViewport(adZoneElement)) {
+            // Tell the tracking pixels within the iframe to load
+            adZoneElement
+                .getElementsByTagName("iframe")[0]
+                .contentWindow.postMessage(
+                    {
+                        eventName: "aaSdkLoadAdUnitTrackingPixels",
+                    },
+                    "*",
+                );
+
             this.#triggerReportAdEvent(
                 adZoneData.ads[adZoneDisplayedAdIndex],
                 this.#ReportedEventType.IMPRESSION,

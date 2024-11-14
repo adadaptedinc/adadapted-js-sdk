@@ -228,14 +228,14 @@ export const App: FC = (): ReactElement => {
         apiKey: "",
         zonePlacements: [
             {
-                zoneId: "102110",
-                width: -1,
-                height: 100,
+                zoneId: "",
+                width: 1200,
+                height: 627,
             },
             {
-                zoneId: "110002",
-                width: -1,
-                height: 100,
+                zoneId: "",
+                width: 1200,
+                height: 627,
             },
         ],
     };
@@ -501,11 +501,11 @@ export const App: FC = (): ReactElement => {
                 enableKeywordIntercept: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
-                params: {
-                    // storeId: "230",
-                    recipeContextId: "1167",
-                    recipeContextZoneIds: ["102133", "102134"],
-                },
+                // params: {
+                //     // storeId: "230",
+                //     recipeContextId: "1167",
+                //     recipeContextZoneIds: ["102133", "102134"],
+                // },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
                 },
