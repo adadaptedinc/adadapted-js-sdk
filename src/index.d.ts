@@ -31,6 +31,7 @@ declare class AdadaptedJsSdk {
     params: { [key: string]: any };
     onAdZonesRefreshed: () => void;
     onAddItemsTriggered: () => void;
+    onExternalContentAdClicked: () => void;
     onPayloadsAvailable: () => void;
     onAdsRetrieved: () => void;
     /**
@@ -214,6 +215,11 @@ declare namespace AdadaptedJsSdk {
          * @param items - The array of items to add.
          */
         onAddItemsTriggered?(items: DetailedListItem[]): void;
+        /**
+         * Callback that gets triggered when ads that represent external(non-app) content are clicked.
+         * @param adId - The ID of the ad.
+         */
+        onExternalContentAdClicked?(adId: string): void;
         /**
          * Callback that gets triggered when user's "add to list" payloads have been retrieved.
          * @param payloads - All payloads the client must go through.

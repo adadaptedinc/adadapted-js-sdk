@@ -49,12 +49,17 @@ class AdadaptedJsSdk {
             // Defaulting to empty method.
         };
         /**
+         * Triggered when ads that represent external(non-app) content are clicked.
+         */
+        this.onExternalContentAdClicked = () => {
+            // Defaulting to empty method.
+        };
+        /**
          * Triggered when payloads are available for processing.
          */
         this.onPayloadsAvailable = () => {
             // Defaulting to empty method.
         };
-
         /**
          * Triggered when ads have been retrieved.
          */
@@ -169,6 +174,13 @@ class AdadaptedJsSdk {
                 // globally for use when the method needs to be triggered.
                 if (props.onAddItemsTriggered) {
                     this.onAddItemsTriggered = props.onAddItemsTriggered;
+                }
+
+                // If the callback for onExternalContentAdClicked was provided, set it
+                // globally for use when the method needs to be triggered.
+                if (props.onExternalContentAdClicked) {
+                    this.onExternalContentAdClicked =
+                        props.onExternalContentAdClicked;
                 }
 
                 // If the callback for onPayloadsAvailable was provided, set it
@@ -1343,7 +1355,7 @@ class AdadaptedJsSdk {
 
     /**
      * Checks the viewport to see if an element is within view based on a % visible threshold.
-     * @param {HTMLElement} element - The element to check if its withi the viewport.
+     * @param {any} element - The element to check if its withi the viewport.
      * @returns true if the element is within view based on a % visible threshold.
      */
     #isInViewport(element) {
@@ -1445,7 +1457,7 @@ class AdadaptedJsSdk {
 
         /**
          * Triggered when the ad zone clickable area has been clicked.
-         * @param {Event} event - The click event.
+         * @param {any} event - The click event.
          */
         adZoneClickableArea.onclick = (event) => {
             event.preventDefault();
@@ -1697,6 +1709,13 @@ class AdadaptedJsSdk {
         ) {
             this.lastSelectedATL = { ...currentAd };
             this.onAddItemsTriggered(currentAd.payload.detailed_list_items);
+        }
+
+        if (
+            currentAd.action_type !== this.#AdActionType.CONTENT &&
+            this.onExternalContentAdClicked
+        ) {
+            this.onExternalContentAdClicked(currentAd.ad_id);
         }
 
         if (this.cycleAdTimers[adZoneData.id]) {
