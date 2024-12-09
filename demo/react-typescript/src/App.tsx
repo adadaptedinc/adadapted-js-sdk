@@ -228,12 +228,12 @@ export const App: FC = (): ReactElement => {
         apiKey: "",
         zonePlacements: [
             {
-                zoneId: "102110",
+                zoneId: "",
                 width: -1,
                 height: 100,
             },
             {
-                zoneId: "110002",
+                zoneId: "",
                 width: -1,
                 height: 100,
             },
@@ -508,6 +508,9 @@ export const App: FC = (): ReactElement => {
                 },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
+                },
+                onExternalContentAdClicked: (adId) => {
+                    console.log("External Ad Clicked", adId);
                 },
                 onPayloadsAvailable: (payloads) => {
                     const payloadItems: AdadaptedJsSdk.DetailedListItem[] = [];

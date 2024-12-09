@@ -419,6 +419,31 @@ describe("AdadaptedJsSdk", () => {
         });
     });
 
+    describe("onExternalContentAdClicked()", () => {
+        test("is undefined", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+
+            expect(fetch).toHaveBeenCalled();
+            expect(testSdk.onExternalContentAdClicked()).toBeUndefined();
+        });
+
+        test("is defined", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onExternalContentAdClicked: () => {
+                    return "defined";
+                },
+            });
+
+            expect(fetch).toHaveBeenCalled();
+            expect(testSdk.onExternalContentAdClicked()).toBe("defined");
+        });
+    });
+
     describe("onPayloadsAvailable()", () => {
         test("is undefined", async () => {
             const testSdk = sdk!;
