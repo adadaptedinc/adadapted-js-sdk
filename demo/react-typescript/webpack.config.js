@@ -217,7 +217,7 @@ module.exports = (env) => {
                           chunkFilename: "[id].[hash].css?t=" + new Date().getTime(),
                           filename: "[name].[hash].css?t=" + new Date().getTime(),
                       }),
-                  ]
+                  ],
         ),
         resolve: {
             alias: {
