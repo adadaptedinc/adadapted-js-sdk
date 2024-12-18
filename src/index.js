@@ -31,6 +31,7 @@ class AdadaptedJsSdk {
         this.keywordInterceptSearchValue = "";
         this.cycleAdTimers = {};
         this.initialBodyOverflowStyle = document.body.style.overflow;
+        this.scrollContainerId = undefined;
         this.scrollEventAbortController = undefined;
         this.adZoneCurrentAdImpressionTracker = {};
         this.params = undefined;
@@ -131,6 +132,11 @@ class AdadaptedJsSdk {
                 // Set the bundle version (default value used if not provided).
                 if (props.bundleVersion) {
                     this.bundleVersion = props.bundleVersion;
+                }
+
+                // Set the scroll container element ID.
+                if (props.scrollContainerId) {
+                    this.scrollContainerId = props.scrollContainerId;
                 }
 
                 // Set the additional params to use when interacting with the API.
@@ -1244,10 +1250,16 @@ class AdadaptedJsSdk {
             this.scrollEventAbortController = new AbortController();
 
             // Add the scroll event that checks if the ad zone is within view.
-            document.addEventListener(
+            let scrollElement = document;
+
+            if (this.scrollContainerId) {
+                scrollElement = document.getElementById(this.scrollContainerId);
+            }
+
+            scrollElement.addEventListener(
                 "scroll",
                 () => {
-                    this.#onDocumentScroll(this.adZones);
+                    this.#onElementScroll(this.adZones);
                 },
                 {
                     signal: this.scrollEventAbortController.signal,
@@ -1320,10 +1332,10 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Triggered when the document is scrolled to check if the ada zone is in view.
+     * Triggered when the assigned element is scrolled to check if the ada zone is in view.
      * @param {object[]} adZones - The ad zones to iterate to check if they are currently in view.
      */
-    #onDocumentScroll(adZones) {
+    #onElementScroll(adZones) {
         for (const adZone of adZones) {
             const zonePlacementId = this.zonePlacements[adZone.zoneId];
             const containerElement = document.getElementById(zonePlacementId);
