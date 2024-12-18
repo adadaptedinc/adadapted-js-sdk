@@ -501,6 +501,7 @@ export const App: FC = (): ReactElement => {
                 enableKeywordIntercept: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
+                // scrollContainerId: "adUnitsSection",
                 params: {
                     // storeId: "230",
                     recipeContextId: "1167",
@@ -686,7 +687,7 @@ export const App: FC = (): ReactElement => {
                                                                 aaProduct: true,
                                                             },
                                                         ],
-                                                        keywordResult.term_id
+                                                        keywordResult.term_id,
                                                     );
                                                 }}
                                             >
@@ -706,7 +707,7 @@ export const App: FC = (): ReactElement => {
                                                                 aaProduct: true,
                                                             },
                                                         ],
-                                                        keywordResult.term_id
+                                                        keywordResult.term_id,
                                                     );
                                                 }}
                                             >
@@ -805,7 +806,7 @@ export const App: FC = (): ReactElement => {
                     </div>
                 </div>
                 <div className="view-gutter" />
-                <div className="ad-units">
+                <div className="ad-units" id="adUnitsSection">
                     {sdkAppDetails.zonePlacements.map((zone, idx) => {
                         return (
                             <div
