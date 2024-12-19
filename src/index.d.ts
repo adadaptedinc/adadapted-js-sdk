@@ -25,6 +25,7 @@ declare class AdadaptedJsSdk {
     keywordInterceptSearchValue: string;
     cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
+    scrollContainerId: string;
     scrollEventAbortController: any;
     deviceLocale: string;
     adZoneCurrentAdImpressionTracker: { [key: string]: boolean };
@@ -192,6 +193,11 @@ declare namespace AdadaptedJsSdk {
          * needed to make their container element display properly.
          */
         zonePlacements?: ZonePlacements;
+        /**
+         * The ID of the scroll container the ad zones are placed within.
+         * If an ID is not provided, the scoll event will be assigned to the document.
+         */
+        scrollContainerId?: string;
         /**
          * The API environment.
          * If undefined, defaults to production.
