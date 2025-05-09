@@ -225,15 +225,15 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
         apiEnv: "dev",
-        apiKey: "",
+        apiKey: "E33DDF0X66ABE5EA",
         zonePlacements: [
             {
-                zoneId: "",
+                zoneId: "102195",
                 width: -1,
                 height: 100,
             },
             {
-                zoneId: "",
+                zoneId: "102196",
                 width: -1,
                 height: 100,
             },
@@ -294,7 +294,7 @@ export const App: FC = (): ReactElement => {
         jsSdk.reportItemsDeletedFromList([userListItems[idx].name], "Shopping List");
 
         setUserListItems((prevUserListItems) => {
-            let updatedUserListItems = [...prevUserListItems];
+            const updatedUserListItems = [...prevUserListItems];
 
             updatedUserListItems.splice(idx, 1);
 
@@ -325,7 +325,7 @@ export const App: FC = (): ReactElement => {
         jsSdk.reportItemsDeletedFromCart([userCartItems[idx].name], "Cart");
 
         setUserCartItems((prevUserCartItems) => {
-            let updatedUserCartItems = [...prevUserCartItems];
+            const updatedUserCartItems = [...prevUserCartItems];
 
             updatedUserCartItems.splice(idx, 1);
 
@@ -530,11 +530,11 @@ export const App: FC = (): ReactElement => {
                 console.log("SDK Session ID:", jsSdk.getSessionId());
 
                 setTimeout(() => {
-                    const availableKeywordIntercepts = jsSdk.getAvailableKeywordIntercepts();
+                    const availableKeywords = jsSdk.getAvailableKeywordIntercepts();
 
-                    console.log("Available Keyword Intercepts:", availableKeywordIntercepts);
+                    console.log("Available Keyword Intercepts:", availableKeywords);
 
-                    setAvailableKeywordIntercepts(availableKeywordIntercepts);
+                    setAvailableKeywordIntercepts(availableKeywords);
                 }, 2000);
             })
             .catch((err) => {

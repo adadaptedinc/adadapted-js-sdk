@@ -15,3 +15,5 @@ coverage/
 demo/react-typescript/node_modules/
 
 .DS_Store
+
+.codegpt
