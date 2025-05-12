@@ -44,13 +44,9 @@ const DEV_SERVER = {
     hot: true,
     allowedHosts: ["127.0.0.1:8899", "localhost:8899"],
     open: ["dev/"],
-    client: {
-        overlay: true,
-    },
+    client: { overlay: true },
     port: 8899,
-    devMiddleware: {
-        publicPath: "http://127.0.0.1:8899/dev/",
-    },
+    devMiddleware: { publicPath: "http://127.0.0.1:8899/dev/" },
 };
 
 module.exports = (env) => {
@@ -71,24 +67,11 @@ module.exports = (env) => {
                 {
                     test: /\.(sa|sc|c)ss$/,
                     use: [
-                        {
-                            loader: !isServerBuild ? "style-loader" : MiniCssExtractPlugin.loader,
-                        },
-                        {
-                            loader: "css-loader",
-                            options: {
-                                importLoaders: 2,
-                                sourceMap: isSourceMap,
-                            },
-                        },
+                        { loader: !isServerBuild ? "style-loader" : MiniCssExtractPlugin.loader },
+                        { loader: "css-loader", options: { importLoaders: 2, sourceMap: isSourceMap } },
                         {
                             loader: "postcss-loader",
-                            options: {
-                                postcssOptions: {
-                                    plugins: [autoprefixer()],
-                                },
-                                sourceMap: isSourceMap,
-                            },
+                            options: { postcssOptions: { plugins: [autoprefixer()] }, sourceMap: isSourceMap },
                         },
                         {
                             loader: "sass-loader",
@@ -103,14 +86,7 @@ module.exports = (env) => {
                 // image/font files included by CSS
                 {
                     test: /\.(woff|woff2|eot|ttf|svg|png|jpg|gif)$/,
-                    use: [
-                        {
-                            loader: "url-loader",
-                            options: {
-                                limit: 1024,
-                            },
-                        },
-                    ],
+                    use: [{ loader: "url-loader", options: { limit: 1024 } }],
                 },
                 // typescript/javascript
                 {
@@ -118,20 +94,6 @@ module.exports = (env) => {
                     include: [PATHS.src],
                     test: /\.(t|j)sx?$/,
                     use: [
-                        ...(!isServerBuild
-                            ? [
-                                  // cache-loader/thread-loader combo is supposed to optimize rebuilds.
-                                  // As suggested by ts-loader's README
-                                  { loader: "cache-loader" },
-                                  {
-                                      loader: "thread-loader",
-                                      options: {
-                                          // there should be 1 cpu for the fork-ts-checker-webpack-plugin
-                                          workers: require("os").cpus().length - 1,
-                                      },
-                                  },
-                              ]
-                            : []),
                         {
                             loader: "ts-loader",
                             options: {
@@ -153,15 +115,8 @@ module.exports = (env) => {
             splitChunks: {
                 automaticNameDelimiter: "~",
                 cacheGroups: {
-                    default: {
-                        minChunks: 2,
-                        priority: -20,
-                        reuseExistingChunk: true,
-                    },
-                    vendors: {
-                        priority: -10,
-                        test: /[\\/]node_modules[\\/]/,
-                    },
+                    default: { minChunks: 2, priority: -20, reuseExistingChunk: true },
+                    vendors: { priority: -10, test: /[\\/]node_modules[\\/]/ },
                 },
                 chunks: "all",
                 maxAsyncRequests: 5,
@@ -171,44 +126,19 @@ module.exports = (env) => {
                 name: false,
             },
         },
-        output: {
-            filename: !isServerBuild ? "[name].js" : "[name].[hash].js",
-            path: PATHS.dist,
-            publicPath: "./",
-        },
+        output: { filename: !isServerBuild ? "[name].js" : "[name].[hash].js", path: PATHS.dist, publicPath: "./" },
         plugins: [
-            new WebpackBundleAnalyzer.BundleAnalyzerPlugin({
-                analyzerMode: "static",
-                openAnalyzer: false,
-            }),
-            new webpack.DefinePlugin({
-                BUILD_ENV: buildEnv,
-                IS_LOCAL_RUN: !isServerBuild,
-            }),
+            new WebpackBundleAnalyzer.BundleAnalyzerPlugin({ analyzerMode: "static", openAnalyzer: false }),
+            new webpack.DefinePlugin({ BUILD_ENV: buildEnv, IS_LOCAL_RUN: !isServerBuild }),
             new HtmlWebpackPlugin({
-                env: {
-                    appBuildEnv: buildEnv,
-                },
+                env: { appBuildEnv: buildEnv },
                 publicPath: "./",
                 template: `${PATHS.src}/index.ejs`,
                 title: "AdAdapted: JS SDK",
             }),
             ...(!isServerBuild
-                ? [
-                      new ForkTsCheckerWebpackPlugin({
-                          formatter: "codeframe",
-                      }),
-                  ]
-                : [
-                      new CopyWebpackPlugin({
-                          patterns: [
-                              {
-                                  from: PATHS.publicStatic,
-                                  to: `${PATHS.dist}/public`,
-                              },
-                          ],
-                      }),
-                  ]),
+                ? [new ForkTsCheckerWebpackPlugin({ formatter: "codeframe" })]
+                : [new CopyWebpackPlugin({ patterns: [{ from: PATHS.publicStatic, to: `${PATHS.dist}/public` }] })]),
         ].concat(
             !isServerBuild
                 ? []
@@ -219,11 +149,6 @@ module.exports = (env) => {
                       }),
                   ],
         ),
-        resolve: {
-            alias: {
-                src: PATHS.src,
-            },
-            extensions: [".ts", ".tsx", ".js", ".jsx", ".json", ".scss"],
-        },
+        resolve: { alias: { src: PATHS.src }, extensions: [".ts", ".tsx", ".js", ".jsx", ".json", ".scss"] },
     };
 };
