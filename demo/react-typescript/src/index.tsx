@@ -1,10 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import "es6-promise/auto";
 import { App } from "./App";
-
-// Polyfill to allow support for Promise in IE.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-require("es6-promise/auto");
 
 /**
  * Renders the app.

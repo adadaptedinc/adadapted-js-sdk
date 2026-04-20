@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import js from "@eslint/js";
 import { FlatCompat } from "@eslint/eslintrc";
-import stylisticJs from "@stylistic/eslint-plugin-js";
+import stylistic from "@stylistic/eslint-plugin";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +37,7 @@ export default defineConfig([
             react: reactPlugin,
             "prefer-arrow": preferArrow,
             "@typescript-eslint": typescriptEslint,
-            "@stylistic/js": stylisticJs,
+            "@stylistic": stylistic,
         },
 
         languageOptions: {
@@ -51,9 +51,15 @@ export default defineConfig([
         settings: { react: { pragma: "React", fragment: "Fragment", version: "detect" } },
 
         rules: {
-            "@stylistic/js/comma-dangle": ["error", "always-multiline"],
-            "@stylistic/js/no-extra-semi": "error",
-            "@stylistic/js/quotes": ["error", "double", { avoidEscape: true, allowTemplateLiterals: true }],
+            "@stylistic/no-extra-semi": "error",
+            "@stylistic/quotes": [
+                "error",
+                "double",
+                {
+                    avoidEscape: true,
+                    allowTemplateLiterals: "always",
+                },
+            ],
             "@typescript-eslint/adjacent-overload-signatures": "error",
             "@typescript-eslint/array-type": "off",
             "@typescript-eslint/ban-ts-comment": "off",

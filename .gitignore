@@ -4,16 +4,27 @@
 # Project build output
 dist/
 dist.zip
+demo/react-typescript/dist/
 
 # NPM modules
 node_modules/
+demo/react-typescript/node_modules/
 
 # Code Coverage
 coverage/
 
-# Example Project
-demo/react-typescript/node_modules/
+# WebStorm Idea folder
+.idea
+
+# VSCode settings folder
+.vscode
+
+# The SDK file
+demo/html-javascript/adadapted-payload-service-sdk.js
+.codegpt
 
 .DS_Store
 
-.codegpt
+.claude/settings.local.json
+
+gha-creds-*.json

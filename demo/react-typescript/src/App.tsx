@@ -18,14 +18,14 @@ import "./App.scss";
  * created so you can import the SDK into the demo project.
  * https://docs.npmjs.com/cli/v10/commands/npm-link
  */
-import AdadaptedJsSdk from "@adadapted/js-sdk/src";
+import AdadaptedJsSdk from "@adadapted/js-sdk";
 import TextField from "@mui/material/TextField";
 import {
     ShoppingCartOutlined,
     AddShoppingCartOutlined,
     PlaylistAddOutlined,
-    RemoveCircleOutline,
-    CheckCircleOutline,
+    RemoveCircleOutlined,
+    CheckCircleOutlined,
     DeleteSweepOutlined,
     InfoOutlined,
 } from "@mui/icons-material";
@@ -639,21 +639,23 @@ export const App: FC = (): ReactElement => {
                             className="item-search-input"
                             label="Item Search"
                             variant="outlined"
-                            InputProps={{
-                                endAdornment: (
-                                    <InputAdornment position="end">
-                                        <Tooltip
-                                            title={
-                                                availableKeywordIntercepts
-                                                    ? `Available Keywords: ${getAvailableUniqueKeywordsString()}`
-                                                    : ""
-                                            }
-                                            placement="bottom"
-                                        >
-                                            <InfoOutlined />
-                                        </Tooltip>
-                                    </InputAdornment>
-                                ),
+                            slotProps={{
+                                input: {
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <Tooltip
+                                                title={
+                                                    availableKeywordIntercepts
+                                                        ? `Available Keywords: ${getAvailableUniqueKeywordsString()}`
+                                                        : ""
+                                                }
+                                                placement="bottom"
+                                            >
+                                                <InfoOutlined />
+                                            </Tooltip>
+                                        </InputAdornment>
+                                    ),
+                                },
                             }}
                             onChange={(event) => {
                                 clearTimeout(keywordSearchTimer);
@@ -789,7 +791,7 @@ export const App: FC = (): ReactElement => {
                                                 }
                                             }}
                                         >
-                                            <CheckCircleOutline />
+                                            <CheckCircleOutlined />
                                         </IconButton>
                                         <IconButton
                                             className="remove-item-icon"
@@ -797,7 +799,7 @@ export const App: FC = (): ReactElement => {
                                                 removeItemFromList(idx);
                                             }}
                                         >
-                                            <RemoveCircleOutline />
+                                            <RemoveCircleOutlined />
                                         </IconButton>
                                     </div>
                                 </div>
@@ -818,11 +820,7 @@ export const App: FC = (): ReactElement => {
                         );
                     })}
                 </div>
-                <Dialog
-                    className="pending-atl-items-dialog"
-                    open={!!pendingAtlItems && pendingAtlItems.length > 0}
-                    disableEscapeKeyDown={true}
-                >
+                <Dialog className="pending-atl-items-dialog" open={!!pendingAtlItems && pendingAtlItems.length > 0}>
                     <DialogTitle>Where would you like your items to go?</DialogTitle>
                     <DialogContent>
                         {pendingAtlItems?.map((item, idx) => {
@@ -924,7 +922,7 @@ export const App: FC = (): ReactElement => {
                                                 removeItemFromCart(idx);
                                             }}
                                         >
-                                            <RemoveCircleOutline />
+                                            <RemoveCircleOutlined />
                                         </IconButton>
                                     </div>
                                 </div>

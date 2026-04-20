@@ -1,0 +1,43 @@
+name: Deploy Environment
+on:
+    workflow_call:
+        inputs:
+            environment:
+                required: true
+                type: string
+            new_tag:
+                required: false
+                type: string
+permissions:
+    id-token: write
+    contents: read
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        environment: ${{inputs.environment}}
+        steps:
+            - name: Resolve ref
+              id: resolve-ref
+              run: |
+                  if [ "${{ github.event_name }}" == "pull_request" ]; then
+                    echo "ref=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+                  else
+                    echo "ref=${{ github.ref }}" >> $GITHUB_OUTPUT
+                  fi
+            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+              with:
+                  ref: ${{ steps.resolve-ref.outputs.ref }}
+            - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+              with:
+                  node-version: 24
+                  registry-url: "https://registry.npmjs.org"
+            - name: NPM Install
+              run: npm ci
+            - name: NPM Audit Fix
+              run: npm audit fix
+            - if: ${{ inputs.new_tag != '' }}
+              name: Set package version from release tag
+              run: npm version ${{inputs.new_tag}} --no-git-tag-version --allow-same-version
+            - if: ${{ inputs.environment == 'pro' }}
+              name: Publish to NPM
+              run: npm publish --access public
