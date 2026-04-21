@@ -16,17 +16,7 @@ jobs:
         runs-on: ubuntu-latest
         environment: ${{inputs.environment}}
         steps:
-            - name: Resolve ref
-              id: resolve-ref
-              run: |
-                  if [ "${{ github.event_name }}" == "pull_request" ]; then
-                    echo "ref=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
-                  else
-                    echo "ref=${{ github.ref }}" >> $GITHUB_OUTPUT
-                  fi
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-              with:
-                  ref: ${{ steps.resolve-ref.outputs.ref }}
             - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
               with:
                   node-version: 24
