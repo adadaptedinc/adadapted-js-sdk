@@ -1,7 +1,14 @@
 import AdadaptedJsSdk from "./index";
 import { setImmediate } from "timers";
 import { fireEvent } from "@testing-library/dom";
-import { AdPopup } from "./index.d";
+import {
+    expect,
+    describe,
+    it,
+    jest,
+    beforeEach,
+    afterEach,
+} from "@jest/globals";
 
 const testSessionData = {
     session_id: "TEST_SESSION_ID",
@@ -216,7 +223,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("initialize()", () => {
-        test("rejects when apiKey isn't provided", async () => {
+        it("rejects when apiKey isn't provided", async () => {
             const testSdk = sdk!;
 
             try {
@@ -232,7 +239,7 @@ describe("AdadaptedJsSdk", () => {
             }
         });
 
-        test("rejects when advertiserId isn't provided", async () => {
+        it("rejects when advertiserId isn't provided", async () => {
             const testSdk = sdk!;
 
             try {
@@ -248,7 +255,7 @@ describe("AdadaptedJsSdk", () => {
             }
         });
 
-        test("rejects when allowRetargeting isn't provided", async () => {
+        it("rejects when allowRetargeting isn't provided", async () => {
             const testSdk = sdk!;
 
             try {
@@ -264,7 +271,7 @@ describe("AdadaptedJsSdk", () => {
             }
         });
 
-        test("rejects with an error message", async () => {
+        it("rejects with an error message", async () => {
             global.fetch = jest.fn(() => Promise.reject());
 
             const testSdk = sdk!;
@@ -276,7 +283,7 @@ describe("AdadaptedJsSdk", () => {
             }
         });
 
-        test("resolves and sets internal property values as expected", async () => {
+        it("resolves and sets internal property values as expected", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -301,7 +308,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("apiEnv", () => {
-        test("the correct API URL is set when the dev environment is specified", async () => {
+        it("the correct API URL is set when the dev environment is specified", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -310,7 +317,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.apiEnv).toBe("https://sandbox.adadapted.com");
         });
 
-        test("the correct API URL is set when the prod environment is specified", async () => {
+        it("the correct API URL is set when the prod environment is specified", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -324,7 +331,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("allowRetargeting", () => {
-        test("retargeting is allowed", async () => {
+        it("retargeting is allowed", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -333,7 +340,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.allowRetargeting).toBe(true);
         });
 
-        test("retargeting is not allowed", async () => {
+        it("retargeting is not allowed", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -347,7 +354,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("enablePayloads", () => {
-        test("payloads are enabled", async () => {
+        it("payloads are enabled", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -356,7 +363,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.enablePayloads).toBe(true);
         });
 
-        test("payloads are not enabled", async () => {
+        it("payloads are not enabled", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -370,7 +377,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("onAdZonesRefreshed()", () => {
-        test("is undefined", async () => {
+        it("is undefined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -379,7 +386,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.onAdZonesRefreshed()).toBeUndefined();
         });
 
-        test("is defined", async () => {
+        it("is defined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -395,7 +402,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("onAddItemsTriggered()", () => {
-        test("is undefined", async () => {
+        it("is undefined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -404,7 +411,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.onAddItemsTriggered()).toBeUndefined();
         });
 
-        test("is defined", async () => {
+        it("is defined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -420,7 +427,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("onExternalContentAdClicked()", () => {
-        test("is undefined", async () => {
+        it("is undefined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -429,7 +436,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.onExternalContentAdClicked()).toBeUndefined();
         });
 
-        test("is defined", async () => {
+        it("is defined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -445,7 +452,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("onPayloadsAvailable()", () => {
-        test("is undefined", async () => {
+        it("is undefined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -454,7 +461,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.onPayloadsAvailable()).toBeUndefined();
         });
 
-        test("is defined", async () => {
+        it("is defined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -470,7 +477,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("onAdsRetrieved()", () => {
-        test("is undefined", async () => {
+        it("is undefined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -479,7 +486,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.onAdsRetrieved()).toBeUndefined();
         });
 
-        test("is defined", async () => {
+        it("is defined", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize({
@@ -495,7 +502,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("performKeywordSearch()", () => {
-        test("is called without session ID being defined", () => {
+        it("is called without session ID being defined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.sessionId = "";
@@ -506,7 +513,7 @@ describe("AdadaptedJsSdk", () => {
             );
         });
 
-        test("is called without keyword intercepts being defined", () => {
+        it("is called without keyword intercepts being defined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.sessionId = "TEST_SESSION_ID";
@@ -519,7 +526,7 @@ describe("AdadaptedJsSdk", () => {
         });
 
         describe("insufficient search term provided", () => {
-            test("search term not provided", () => {
+            it("search term not provided", () => {
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
                 testSdk.keywordIntercepts = testKeywordIntercepts;
@@ -528,7 +535,7 @@ describe("AdadaptedJsSdk", () => {
                 expect(testSdk.performKeywordSearch(null)).toEqual([]);
             });
 
-            test("search term is provided but is empty string", () => {
+            it("search term is provided but is empty string", () => {
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
                 testSdk.keywordIntercepts = testKeywordIntercepts;
@@ -537,7 +544,7 @@ describe("AdadaptedJsSdk", () => {
                 expect(testSdk.performKeywordSearch("")).toEqual([]);
             });
 
-            test("search term is provided but doesn't meet required match length", () => {
+            it("search term is provided but doesn't meet required match length", () => {
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
                 testSdk.keywordIntercepts = testKeywordIntercepts;
@@ -548,7 +555,7 @@ describe("AdadaptedJsSdk", () => {
         });
 
         describe("search term is provided and meets the required match length", () => {
-            test("has results when a search term that matches is provided", () => {
+            it("has results when a search term that matches is provided", () => {
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
                 testSdk.keywordIntercepts = testKeywordIntercepts;
@@ -563,7 +570,7 @@ describe("AdadaptedJsSdk", () => {
                 expect(fetch).toHaveBeenCalled();
             });
 
-            test("has no results when a search term that doesn't match is provided", () => {
+            it("has no results when a search term that doesn't match is provided", () => {
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
                 testSdk.keywordIntercepts = testKeywordIntercepts;
@@ -573,7 +580,7 @@ describe("AdadaptedJsSdk", () => {
             });
         });
 
-        test("intercept events request has an error and logs a message as expected", async () => {
+        it("intercept events request has an error and logs a message as expected", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -588,14 +595,14 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting the keyword intercept "matched" or "not_matched" event.`,
             );
         });
     });
 
     describe("reportKeywordInterceptTermsPresented()", () => {
-        test("is called without session ID being defined", () => {
+        it("is called without session ID being defined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.sessionId = "";
@@ -607,7 +614,7 @@ describe("AdadaptedJsSdk", () => {
             );
         });
 
-        test("is called without keyword intercepts being defined", () => {
+        it("is called without keyword intercepts being defined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.sessionId = "TEST_SESSION_ID";
@@ -621,7 +628,7 @@ describe("AdadaptedJsSdk", () => {
         });
 
         describe("insufficient term IDs provided", () => {
-            test("term IDs not provided", () => {
+            it("term IDs not provided", () => {
                 const consoleErrorSpy = jest.spyOn(console, "error");
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
@@ -635,7 +642,7 @@ describe("AdadaptedJsSdk", () => {
                 );
             });
 
-            test("term IDs list provided but empty", () => {
+            it("term IDs list provided but empty", () => {
                 const consoleErrorSpy = jest.spyOn(console, "error");
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
@@ -648,7 +655,7 @@ describe("AdadaptedJsSdk", () => {
                 );
             });
 
-            test("term IDs provided but no keywords available", () => {
+            it("term IDs provided but no keywords available", () => {
                 const consoleErrorSpy = jest.spyOn(console, "error");
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
@@ -667,7 +674,7 @@ describe("AdadaptedJsSdk", () => {
             });
         });
 
-        test("intercept events request has an error and logs a message as expected", async () => {
+        it("intercept events request has an error and logs a message as expected", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -682,14 +689,14 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting the keyword intercept "presented" event.`,
             );
         });
     });
 
     describe("reportKeywordInterceptTermSelected()", () => {
-        test("is called without session ID being defined", () => {
+        it("is called without session ID being defined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.sessionId = "";
@@ -701,7 +708,7 @@ describe("AdadaptedJsSdk", () => {
             );
         });
 
-        test("is called without keyword intercepts being defined", () => {
+        it("is called without keyword intercepts being defined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.sessionId = "TEST_SESSION_ID";
@@ -715,7 +722,7 @@ describe("AdadaptedJsSdk", () => {
         });
 
         describe("insufficient term IDs provided", () => {
-            test("term IDs not provided", () => {
+            it("term IDs not provided", () => {
                 const consoleErrorSpy = jest.spyOn(console, "error");
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
@@ -729,7 +736,7 @@ describe("AdadaptedJsSdk", () => {
                 );
             });
 
-            test("term IDs provided but no keywords available", () => {
+            it("term IDs provided but no keywords available", () => {
                 const consoleErrorSpy = jest.spyOn(console, "error");
                 const testSdk = sdk!;
                 testSdk.sessionId = "TEST_SESSION_ID";
@@ -745,7 +752,7 @@ describe("AdadaptedJsSdk", () => {
             });
         });
 
-        test("intercept events request has an error and logs a message as expected", async () => {
+        it("intercept events request has an error and logs a message as expected", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -760,26 +767,26 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting the keyword intercept "selected" event.`,
             );
         });
     });
 
     describe("acknowledgeAdded()", () => {
-        test("lastSelectedATL is undefined", () => {
+        it("lastSelectedATL is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
             testSdk.lastSelectedATL = undefined;
 
             testSdk.acknowledgeAdded();
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An ATL ad must be selected by the user in order to acknowledge item being added to list.`,
             );
         });
 
-        test("lastSelectedATL is defined but the request fails", async () => {
+        it("lastSelectedATL is defined but the request fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -793,12 +800,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred reporting a user "interaction" event.`,
             );
         });
 
-        test("lastSelectedATL is defined and the request succeeds", async () => {
+        it("lastSelectedATL is defined and the request succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.lastSelectedATL = selectedATL;
@@ -822,41 +829,41 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("reportItemsAddedToCart()", () => {
-        test("itemNames is undefined", () => {
+        it("itemNames is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.reportItemsAddedToCart(undefined, testCartId);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         });
 
-        test("itemNames is empty", () => {
+        it("itemNames is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsAddedToCart([], testCartId);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         });
 
-        test("cartId is empty", () => {
+        it("cartId is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsAddedToCart(testItemNames, "");
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "Both cart ID and item names list must be provided in order to report adding items to cart.",
             );
         });
 
-        test("API request to report adding items to cart fails", async () => {
+        it("API request to report adding items to cart fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -869,12 +876,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting an item "user_added_to_cart" event.`,
             );
         });
 
-        test("API request to report adding items to cart succeeds", async () => {
+        it("API request to report adding items to cart succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -897,41 +904,41 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("reportItemsDeletedFromCart()", () => {
-        test("itemNames is undefined", () => {
+        it("itemNames is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.reportItemsDeletedFromCart(undefined, testCartId);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "Both cart ID and item names list must be provided in order to report deleting items from cart.",
             );
         });
 
-        test("itemNames is empty", () => {
+        it("itemNames is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsDeletedFromCart([], testCartId);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "Both cart ID and item names list must be provided in order to report deleting items from cart.",
             );
         });
 
-        test("cartId is empty", () => {
+        it("cartId is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsDeletedFromCart(testItemNames, "");
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "Both cart ID and item names list must be provided in order to report deleting items from cart.",
             );
         });
 
-        test("API request to report deleting items from cart fails", async () => {
+        it("API request to report deleting items from cart fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -944,12 +951,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting an item "user_deleted_from_cart" event.`,
             );
         });
 
-        test("API request to report deleting items from cart succeeds", async () => {
+        it("API request to report deleting items from cart succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -972,30 +979,30 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("reportItemsAddedToList()", () => {
-        test("itemNames is undefined", () => {
+        it("itemNames is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.reportItemsAddedToList(undefined);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The item names list must be provided in order to add items to list.",
             );
         });
 
-        test("itemNames is empty", () => {
+        it("itemNames is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsAddedToList([]);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The item names list must be provided in order to add items to list.",
             );
         });
 
-        test("API request to report adding items to list fails", async () => {
+        it("API request to report adding items to list fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -1008,12 +1015,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting an item "user_added_to_list" event.`,
             );
         });
 
-        test("API request to report adding items to list succeeds", async () => {
+        it("API request to report adding items to list succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -1036,30 +1043,30 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("reportItemsDeletedFromList()", () => {
-        test("itemNames is undefined", () => {
+        it("itemNames is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.reportItemsDeletedFromList(undefined);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The item names list must be provided in order to delete items from list.",
             );
         });
 
-        test("itemNames is empty", () => {
+        it("itemNames is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsDeletedFromList([]);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The item names list must be provided in order to delete items from list.",
             );
         });
 
-        test("API request to report deleting items from list fails", async () => {
+        it("API request to report deleting items from list fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -1072,12 +1079,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting an item "user_deleted_from_list" event.`,
             );
         });
 
-        test("API request to report deleting items from list succeeds", async () => {
+        it("API request to report deleting items from list succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -1100,30 +1107,30 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("reportItemsCrossedOffList()", () => {
-        test("itemNames is undefined", () => {
+        it("itemNames is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.reportItemsCrossedOffList(undefined);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The item names list must be provided in order to cross off items from list.",
             );
         });
 
-        test("itemNames is empty", () => {
+        it("itemNames is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.reportItemsCrossedOffList([]);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The item names list must be provided in order to cross off items from list.",
             );
         });
 
-        test("API request to report deleting items from list fails", async () => {
+        it("API request to report deleting items from list fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -1136,12 +1143,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while reporting an item "user_crossed_off_list" event.`,
             );
         });
 
-        test("API request to report deleting items from list succeeds", async () => {
+        it("API request to report deleting items from list succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -1175,30 +1182,30 @@ describe("AdadaptedJsSdk", () => {
             },
         ];
 
-        test("payloadStatusList is undefined", () => {
+        it("payloadStatusList is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.updatePayloadStatus(undefined);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The payload status list must be provided in order to update the payload(s) status.",
             );
         });
 
-        test("payloadStatusList is empty", () => {
+        it("payloadStatusList is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.updatePayloadStatus([]);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The payload status list must be provided in order to update the payload(s) status.",
             );
         });
 
-        test("API request to update payload status fails", async () => {
+        it("API request to update payload status fails", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -1211,12 +1218,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred while updating payload status.`,
             );
         });
 
-        test("API request to update payload status succeeds", async () => {
+        it("API request to update payload status succeeds", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.advertiserId = "TEST_ADVERTISER_ID";
@@ -1238,30 +1245,30 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("updateStoreId", () => {
-        test("newStoreId is undefined", () => {
+        it("newStoreId is undefined", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             // @ts-ignore
             testSdk.updateStoreId(undefined);
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The store ID must be provided in order to update the SDK to use it.",
             );
         });
 
-        test("newStoreId is empty", () => {
+        it("newStoreId is empty", () => {
             const consoleErrorSpy = jest.spyOn(console, "error");
             const testSdk = sdk!;
 
             testSdk.updateStoreId("");
 
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 "The store ID must be provided in order to update the SDK to use it.",
             );
         });
 
-        test("API request to refresh ad zones after changing the store ID fails while trying to initialize the session", async () => {
+        it("API request to refresh ad zones after changing the store ID fails while trying to initialize the session", async () => {
             // @ts-ignore
             global.fetch = jest.fn(() => Promise.reject());
 
@@ -1274,12 +1281,12 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(fetch).toHaveBeenCalled();
-            expect(consoleErrorSpy).toBeCalledWith(
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred initializing the SDK.`,
             );
         });
 
-        test("API request to refresh ad zones after changing the store ID succeeds while trying to initialize the session", async () => {
+        it("API request to refresh ad zones after changing the store ID succeeds while trying to initialize the session", async () => {
             const flushPromises = () => new Promise(setImmediate);
             const testSdk = sdk!;
             testSdk.deviceOs = "android";
@@ -1302,7 +1309,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("unmount()", () => {
-        test("timeouts are defined and cleared properly", async () => {
+        it("timeouts are defined and cleared properly", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -1328,7 +1335,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.refreshSessionTimer).toBeUndefined();
         });
 
-        test("timeouts are undefined and remain undefined", () => {
+        it("timeouts are undefined and remain undefined", () => {
             const testSdk = sdk!;
 
             expect(
@@ -1354,7 +1361,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("getSessionId()", () => {
-        test("is defined if initilization has been triggered", async () => {
+        it("is defined if initilization has been triggered", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);
@@ -1362,7 +1369,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.getSessionId()).toBe(testSessionData.session_id);
         });
 
-        test("is not defined if initilization has not been triggered", () => {
+        it("is not defined if initilization has not been triggered", () => {
             const testSdk = sdk!;
 
             expect(testSdk.getSessionId()).toBeUndefined();
@@ -1370,7 +1377,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("getAvailableKeywordIntercepts()", () => {
-        test("returns the keyword terms when keywords are available", () => {
+        it("returns the keyword terms when keywords are available", () => {
             const testSdk = sdk!;
             testSdk.keywordIntercepts = {
                 terms: [
@@ -1392,7 +1399,7 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.getAvailableKeywordIntercepts()).toHaveLength(2);
         });
 
-        test("returns undefined when keywords are not available", () => {
+        it("returns undefined when keywords are not available", () => {
             const testSdk = sdk!;
 
             expect(testSdk.getAvailableKeywordIntercepts()).toBeUndefined();
@@ -1400,7 +1407,7 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("Ad unit interactions", () => {
-        test("popover is displayed when ad action type is 'popup'", async () => {
+        it("popover is displayed when ad action type is 'popup'", async () => {
             const testSdk = sdk!;
 
             await testSdk.initialize(baseTestProps);

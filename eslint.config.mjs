@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import js from "@eslint/js";
 import { FlatCompat } from "@eslint/eslintrc";
-import stylisticJs from "@stylistic/eslint-plugin-js";
+import stylistic from "@stylistic/eslint-plugin";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,7 +40,7 @@ export default defineConfig([
             jest: jestPlugin,
             jsdoc: jsdocPlugin,
             "prefer-arrow": preferArrow,
-            "@stylistic/js": stylisticJs,
+            "@stylistic": stylistic,
         },
 
         languageOptions: {
@@ -56,12 +56,14 @@ export default defineConfig([
         },
 
         rules: {
-            "@stylistic/js/comma-dangle": ["error", "always-multiline"],
-            "@stylistic/js/no-extra-semi": "error",
-            "@stylistic/js/quotes": [
+            "@stylistic/no-extra-semi": "error",
+            "@stylistic/quotes": [
                 "error",
                 "double",
-                { avoidEscape: true, allowTemplateLiterals: true },
+                {
+                    avoidEscape: true,
+                    allowTemplateLiterals: "always",
+                },
             ],
             "arrow-parens": ["off", "always"],
             "brace-style": ["off", "off"],

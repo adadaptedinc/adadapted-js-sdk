@@ -1,4 +1,4 @@
-import packageJson from "../package.json";
+const packageJson = require("../package.json");
 
 /**
  * The AdAdapted JS SDK class.
@@ -2549,4 +2549,4 @@ class AdadaptedJsSdk {
     };
 }
 
-export default AdadaptedJsSdk;
+module.exports = AdadaptedJsSdk;
