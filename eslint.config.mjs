@@ -1,9 +1,8 @@
 import { defineConfig, globalIgnores } from "eslint/config";
-import importPlugin from "eslint-plugin-import";
+import importPlugin from "eslint-plugin-import-x";
 import jestPlugin from "eslint-plugin-jest";
 import jsdocPlugin from "eslint-plugin-jsdoc";
 import preferArrow from "eslint-plugin-prefer-arrow";
-import { fixupPluginRules } from "@eslint/compat";
 import globals from "globals";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +35,7 @@ export default defineConfig([
         ),
 
         plugins: {
-            import: fixupPluginRules(importPlugin),
+            import: importPlugin,
             jest: jestPlugin,
             jsdoc: jsdocPlugin,
             "prefer-arrow": preferArrow,
