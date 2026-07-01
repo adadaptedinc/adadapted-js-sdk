@@ -47,8 +47,7 @@ declare class AdadaptedJsSdk {
      * @returns the available keyword intercepts.
      */
     getAvailableKeywordIntercepts():
-        | AdadaptedJsSdk.KeywordSearchTerm[]
-        | undefined;
+        AdadaptedJsSdk.KeywordSearchTerm[] | undefined;
     /**
      * Initializes the session for the AdAdapted API and sets up the SDK.
      * @param props - The props used to initialize the SDK.
