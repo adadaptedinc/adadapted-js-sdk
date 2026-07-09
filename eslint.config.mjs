@@ -24,7 +24,6 @@ export default defineConfig([
         "coverage/**/*",
         "dist/**/*",
         "node_modules/**/*",
-        "**/webpack.config.js",
         "demo/**/*",
         "**/eslint.config.mjs",
     ]),

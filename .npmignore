@@ -14,7 +14,6 @@ gha-creds-*.json
 jest.setup.js
 jest.config.js
 eslint.config.mjs
-webpack.config.js
 renovate.json
 CLAUDE.md
 dist/
