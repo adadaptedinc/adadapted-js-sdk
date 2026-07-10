@@ -1416,8 +1416,6 @@ describe("AdadaptedJsSdk", () => {
                 document.getElementsByClassName("clickable-area")[1],
             );
 
-            console.log(document.body.outerHTML);
-
             expect(document.getElementsByClassName("AdPopup")).toHaveLength(1);
         });
     });

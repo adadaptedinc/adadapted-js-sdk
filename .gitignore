@@ -1,6 +1,3 @@
-# cache-loader webpack plugin's cache dir
-.cache-loader/
-
 # Project build output
 dist/
 dist.zip
