@@ -1,2 +1,2 @@
-// See https://facebook.github.io/jest/docs/en/webpack.html
+// See https://jestjs.io/docs/webpack#handling-static-assets
 module.exports = "test-file-stub";
