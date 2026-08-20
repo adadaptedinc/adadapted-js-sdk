@@ -12,24 +12,32 @@ declare class AdadaptedJsSdk {
     enableKeywordIntercept: boolean;
     zonePlacements: any;
     apiEnv: string;
+    apiEnvString: string;
     listManagerApiEnv: string;
     payloadApiEnv: string;
     deviceOs: any;
     sessionId: any;
-    sessionInfo: any;
-    adZones: any;
+    sessionCreatedAt: number | undefined;
+    sessionLastActiveAt: number | undefined;
     lastSelectedATL: any;
-    refreshAdZonesTimer: any;
-    refreshSessionTimer: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
-    cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
     scrollContainerId: string;
-    scrollEventAbortController: any;
     deviceLocale: string;
-    adZoneCurrentAdImpressionTracker: { [key: string]: boolean };
     params: { [key: string]: any };
+    /**
+     * Map of {Zone ID -> internal zone state}. Each zone owns its own ad request,
+     * refresh countdown, and impression tracking.
+     */
+    zones: { [key: string]: any };
+    /**
+     * Map of {Zone ID -> whether an ad is currently available for the zone}.
+     */
+    adZoneAdAvailabilityMap: { [key: string]: boolean };
+    intersectionObserver: any;
+    documentEventAbortController: any;
+    hashedApiKey: string | undefined;
     onAdZonesRefreshed: () => void;
     onAddItemsTriggered: () => void;
     onExternalContentAdClicked: () => void;
@@ -54,6 +62,15 @@ declare class AdadaptedJsSdk {
      * @returns a Promise of void.
      */
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
+    /**
+     * Reports that a recipe has been loaded using the provided context.
+     * @param recipeContextId - The recipe context ID that was used for the recipe load.
+     * @param recipContextZoneIds - All zone IDs used to load ads for the recipe context ID.
+     */
+    reportRecipeLoaded(
+        recipeContextId: string,
+        recipContextZoneIds: string[],
+    ): void;
     /**
      * Searches through available ad keywords based on provided search term.
      * @param searchTerm - The search term used to match against available keyword intercepts.
@@ -323,20 +340,6 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
-     * Interface defining a wrapper for an {@link AdZone}.
-     */
-    export interface AdZoneInfo {
-        /**
-         * The ad zone ID.
-         */
-        zoneId: string;
-        /**
-         * The ad zone component.
-         */
-        adZone: JSX.Element;
-    }
-
-    /**
      * Interface defining a keyword search result.
      */
     export interface KeywordSearchResult {
@@ -482,33 +485,22 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
-     * The definition of a zone.
+     * The definition of the ad zone data returned for a single ad request.
      */
     export interface Zone {
         /**
-         * The zone ID.
+         * The ad to display within the zone. An ad with an empty {@link Ad.id} means
+         * the API had nothing to serve, and only its refresh_time is meaningful.
          */
-        id: string;
+        ad: Ad;
         /**
-         * ?
-         */
-        land_height: number;
-        /**
-         * ?
-         */
-        land_width: number;
-        /**
-         * ?
+         * The optimized height of the zone.
          */
         port_height: number;
         /**
-         * ?
+         * The optimized width of the zone.
          */
         port_width: number;
-        /**
-         * The available ads.
-         */
-        ads: Ad[];
     }
 
     /**
@@ -516,88 +508,42 @@ declare namespace AdadaptedJsSdk {
      */
     export interface Ad {
         /**
-         * The ad ID.
+         * The ad ID. An empty string means no ad was served.
          */
-        ad_id: string;
+        id: string;
         /**
          * The impression ID.
          */
         impression_id: string;
         /**
-         * The type of ad this is.
-         */
-        type: string;
-        /**
-         * How often the ad refreshes? Swaps out for another?
-         * Length of time in seconds.
+         * How long, in seconds, the ad is displayed for before the SDK requests the
+         * next ad for the zone. On a response with no ad, this is the backoff to
+         * wait before asking again.
          */
         refresh_time: number;
         /**
-         * The URL for the ad image to display.
+         * The URL for the ad creative to display.
          */
         creative_url: string;
         /**
-         * The tracking pixel to include in the zone view for this ad?
-         */
-        tracking_html: string;
-        /**
-         * ?
+         * The URL the ad navigates to when interacted with. An empty string when the
+         * ad's action type doesn't navigate anywhere.
          */
         action_path: string;
         /**
-         * ?
+         * What interacting with the ad does.
          */
         action_type: AdActionType;
         /**
-         * If true, the ad will be hidden after interaction.
-         */
-        hide_after_interaction: boolean;
-        /**
-         * ?
+         * The items to add to a list or cart, for add-to-list ads.
          */
         payload: AdPayload;
         /**
-         * ?
+         * The ID of the zone the ad was served for.
+         * NOTE: Set by the SDK rather than the API, so every reported event can name
+         *       its zone.
          */
-        popup: AdPopup;
-    }
-
-    /**
-     * The definition of an Ad Popup.
-     */
-    export interface AdPopup {
-        /**
-         * ?
-         */
-        alt_close_btn: string;
-        /**
-         * ?
-         */
-        background_color: string;
-        /**
-         * ?
-         */
-        hide_banner: boolean;
-        /**
-         * ?
-         */
-        hide_browser_nav: boolean;
-        /**
-         * ?
-         */
-        hide_close_btn: boolean;
-        /**
-         * ?
-         */
-        text_color: string;
-        /**
-         * ?
-         */
-        title_text: string;
-        /**
-         * ?
-         */
-        type: string;
+        zone_id?: string;
     }
 
     /**
