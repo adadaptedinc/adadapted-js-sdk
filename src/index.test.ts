@@ -1627,21 +1627,28 @@ describe("AdadaptedJsSdk", () => {
             await testSdk.initialize(baseTestProps);
             await setZonesOnScreen(true);
 
-            const adEventCalls = fetchMock.mock.calls.filter(([url]) =>
-                (url as string).includes("/events"),
-            );
+            // Event requests span two hosts: ad events go to the ad server, while
+            // SDK events go to the event collector. Compare the parsed host rather
+            // than a substring of the URL, so a host name appearing elsewhere in
+            // the URL cannot be mistaken for the host being requested.
+            const adServerEventUrls = fetchMock.mock.calls
+                .map(([url]) => new URL(url as string))
+                .filter(
+                    (url) =>
+                        url.host === "sandbox.adadapted.com" &&
+                        url.pathname.endsWith("/events"),
+                )
+                .map((url) => url.href);
 
-            expect(adEventCalls.length).toBeGreaterThan(0);
+            expect(adServerEventUrls.length).toBeGreaterThan(0);
 
-            for (const [url] of adEventCalls) {
-                // Everything on the ad server is v1.0.0 now. The platform segment is
-                // gone from those routes, which matters because deviceOs is
-                // hardcoded to "android" and was never true for a web SDK.
-                if ((url as string).includes("sandbox.adadapted.com")) {
-                    expect(url).toBe(
-                        "https://sandbox.adadapted.com/v/1.0.0/ad/events",
-                    );
-                }
+            // Everything on the ad server is v1.0.0 now. The platform segment is
+            // gone from those routes, which matters because deviceOs is hardcoded
+            // to "android" and was never true for a web SDK.
+            for (const url of adServerEventUrls) {
+                expect(url).toBe(
+                    "https://sandbox.adadapted.com/v/1.0.0/ad/events",
+                );
             }
         });
 
