@@ -485,6 +485,26 @@ export const App: FC = (): ReactElement => {
         return finalString;
     };
 
+    /**
+     * Renders the container element an ad zone gets displayed within.
+     * NOTE: The index must be the zone's index within sdkAppDetails.zonePlacements,
+     *       because the element ID it produces is what gets mapped to the zone ID
+     *       when the SDK is initialized.
+     * @param zone - The zone to render the container for.
+     * @param idx - The index of the zone within the configured zone placements.
+     * @returns the ad zone container element.
+     */
+    const renderAdZonePlacement = (zone: ZoneDetails, idx: number): ReactElement => {
+        return (
+            <div
+                key={`zone-placement-${idx}`}
+                id={`zone${idx + 1}`}
+                className="ad-zone"
+                style={{ width: `${zone.width}px`, height: `${zone.height}px` }}
+            />
+        );
+    };
+
     useEffect(() => {
         const zonePlacements: { [key: string]: string } = {};
 
@@ -633,191 +653,194 @@ export const App: FC = (): ReactElement => {
                 </div>
             </div>
             <div className="page-body">
-                <div className="search-view">
-                    <div className="keyword-intercept-search">
-                        <TextField
-                            className="item-search-input"
-                            label="Item Search"
-                            variant="outlined"
-                            slotProps={{
-                                input: {
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <Tooltip
-                                                title={
-                                                    availableKeywordIntercepts
-                                                        ? `Available Keywords: ${getAvailableUniqueKeywordsString()}`
-                                                        : ""
-                                                }
-                                                placement="bottom"
-                                            >
-                                                <InfoOutlined />
-                                            </Tooltip>
-                                        </InputAdornment>
-                                    ),
-                                },
-                            }}
-                            onChange={(event) => {
-                                clearTimeout(keywordSearchTimer);
-
-                                keywordSearchTimer = window.setTimeout(() => {
-                                    setItemSearchResults({
-                                        keywordResult: jsSdk.performKeywordSearch(event.target.value),
-                                        itemResult: performItemSearch(event.target.value),
-                                    });
-                                }, 300);
-                            }}
-                        />
-                        <div className="keyword-search-results">
-                            {itemSearchResults.keywordResult.map((keywordResult, idx) => {
-                                return (
-                                    <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
-                                        <div className="item-name">
-                                            <div className="ad-badge">AD</div>
-                                            {keywordResult.replacement}
-                                        </div>
-                                        <div className="item-options">
-                                            <Button
-                                                className="add-to-cart-button"
-                                                variant="contained"
-                                                onClick={() => {
-                                                    addItemsToCart(
-                                                        [
-                                                            {
-                                                                id: keywordResult.term_id,
-                                                                name: keywordResult.replacement,
-                                                                aaProduct: true,
-                                                            },
-                                                        ],
-                                                        keywordResult.term_id,
-                                                    );
-                                                }}
-                                            >
-                                                <Tooltip title="Add to Cart" placement="bottom">
-                                                    <AddShoppingCartOutlined className="add-to-cart-icon" />
+                <div className="stacked-view">
+                    <div className="search-view">
+                        <div className="keyword-intercept-search">
+                            <TextField
+                                className="item-search-input"
+                                label="Item Search"
+                                variant="outlined"
+                                slotProps={{
+                                    input: {
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <Tooltip
+                                                    title={
+                                                        availableKeywordIntercepts
+                                                            ? `Available Keywords: ${getAvailableUniqueKeywordsString()}`
+                                                            : ""
+                                                    }
+                                                    placement="bottom"
+                                                >
+                                                    <InfoOutlined />
                                                 </Tooltip>
-                                            </Button>
-                                            <Button
-                                                className="add-to-list-button"
-                                                variant="contained"
-                                                onClick={() => {
-                                                    addItemsToList(
-                                                        [
-                                                            {
-                                                                id: keywordResult.term_id,
-                                                                name: keywordResult.replacement,
-                                                                aaProduct: true,
-                                                            },
-                                                        ],
-                                                        keywordResult.term_id,
-                                                    );
-                                                }}
-                                            >
-                                                <Tooltip title="Add to List" placement="bottom">
-                                                    <PlaylistAddOutlined className="add-to-list-icon" />
-                                                </Tooltip>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                            {itemSearchResults.itemResult.map((itemResult, idx) => {
-                                return (
-                                    <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
-                                        <div className="item-name">{itemResult.name}</div>
-                                        <div className="item-options">
-                                            <Button
-                                                className="add-to-cart-button"
-                                                variant="contained"
-                                                onClick={() => {
-                                                    addItemsToCart([itemResult]);
-                                                }}
-                                            >
-                                                <Tooltip title="Add to Cart" placement="bottom">
-                                                    <AddShoppingCartOutlined className="add-to-cart-icon" />
-                                                </Tooltip>
-                                            </Button>
-                                            <Button
-                                                className="add-to-list-button"
-                                                variant="contained"
-                                                onClick={() => {
-                                                    addItemsToList([itemResult]);
-                                                }}
-                                            >
-                                                <Tooltip title="Add to List" placement="bottom">
-                                                    <PlaylistAddOutlined className="add-to-list-icon" />
-                                                </Tooltip>
-                                            </Button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-                <div className="view-gutter" />
-                <div className="list-view">
-                    <div className="list-header">
-                        <div className="list-name">My Shopping List</div>
-                        <div className="header-actions">
-                            <IconButton
-                                className="remove-all-items-from-list-icon"
-                                disabled={userListItems.length === 0}
-                                onClick={() => {
-                                    removeAllItemsFromList();
+                                            </InputAdornment>
+                                        ),
+                                    },
                                 }}
-                            >
-                                <DeleteSweepOutlined />
-                            </IconButton>
+                                onChange={(event) => {
+                                    clearTimeout(keywordSearchTimer);
+
+                                    keywordSearchTimer = window.setTimeout(() => {
+                                        setItemSearchResults({
+                                            keywordResult: jsSdk.performKeywordSearch(event.target.value),
+                                            itemResult: performItemSearch(event.target.value),
+                                        });
+                                    }, 300);
+                                }}
+                            />
+                            <div className="keyword-search-results">
+                                {itemSearchResults.keywordResult.map((keywordResult, idx) => {
+                                    return (
+                                        <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
+                                            <div className="item-name">
+                                                <div className="ad-badge">AD</div>
+                                                {keywordResult.replacement}
+                                            </div>
+                                            <div className="item-options">
+                                                <Button
+                                                    className="add-to-cart-button"
+                                                    variant="contained"
+                                                    onClick={() => {
+                                                        addItemsToCart(
+                                                            [
+                                                                {
+                                                                    id: keywordResult.term_id,
+                                                                    name: keywordResult.replacement,
+                                                                    aaProduct: true,
+                                                                },
+                                                            ],
+                                                            keywordResult.term_id,
+                                                        );
+                                                    }}
+                                                >
+                                                    <Tooltip title="Add to Cart" placement="bottom">
+                                                        <AddShoppingCartOutlined className="add-to-cart-icon" />
+                                                    </Tooltip>
+                                                </Button>
+                                                <Button
+                                                    className="add-to-list-button"
+                                                    variant="contained"
+                                                    onClick={() => {
+                                                        addItemsToList(
+                                                            [
+                                                                {
+                                                                    id: keywordResult.term_id,
+                                                                    name: keywordResult.replacement,
+                                                                    aaProduct: true,
+                                                                },
+                                                            ],
+                                                            keywordResult.term_id,
+                                                        );
+                                                    }}
+                                                >
+                                                    <Tooltip title="Add to List" placement="bottom">
+                                                        <PlaylistAddOutlined className="add-to-list-icon" />
+                                                    </Tooltip>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {itemSearchResults.itemResult.map((itemResult, idx) => {
+                                    return (
+                                        <div key={`keyword-search-result-${idx}`} className="keyword-search-result">
+                                            <div className="item-name">{itemResult.name}</div>
+                                            <div className="item-options">
+                                                <Button
+                                                    className="add-to-cart-button"
+                                                    variant="contained"
+                                                    onClick={() => {
+                                                        addItemsToCart([itemResult]);
+                                                    }}
+                                                >
+                                                    <Tooltip title="Add to Cart" placement="bottom">
+                                                        <AddShoppingCartOutlined className="add-to-cart-icon" />
+                                                    </Tooltip>
+                                                </Button>
+                                                <Button
+                                                    className="add-to-list-button"
+                                                    variant="contained"
+                                                    onClick={() => {
+                                                        addItemsToList([itemResult]);
+                                                    }}
+                                                >
+                                                    <Tooltip title="Add to List" placement="bottom">
+                                                        <PlaylistAddOutlined className="add-to-list-icon" />
+                                                    </Tooltip>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
-                    <div className="user-list">
-                        {userListItems.map((listItem, idx) => {
-                            return (
-                                <div
-                                    key={`user-list-${idx}`}
-                                    className={`user-list-item ${listItem.isCrossedOff ? "item-crossed-off" : ""}`}
+                    <div className="list-view">
+                        <div className="list-header">
+                            <div className="list-name">My Shopping List</div>
+                            <div className="header-actions">
+                                <IconButton
+                                    className="remove-all-items-from-list-icon"
+                                    disabled={userListItems.length === 0}
+                                    onClick={() => {
+                                        removeAllItemsFromList();
+                                    }}
                                 >
-                                    <div className="crossed-off-line" />
-                                    <div className="item-id">{listItem.id}</div>
-                                    <div className="item-name">{listItem.name}</div>
-                                    <div className="item-quantity">{listItem.quantity}</div>
-                                    <div className="item-actions">
-                                        <IconButton
-                                            className="complete-item-icon"
-                                            onClick={() => {
-                                                if (!listItem.isCrossedOff) {
-                                                    crossItemOffList(idx);
-                                                }
-                                            }}
-                                        >
-                                            <CheckCircleOutlined />
-                                        </IconButton>
-                                        <IconButton
-                                            className="remove-item-icon"
-                                            onClick={() => {
-                                                removeItemFromList(idx);
-                                            }}
-                                        >
-                                            <RemoveCircleOutlined />
-                                        </IconButton>
+                                    <DeleteSweepOutlined />
+                                </IconButton>
+                            </div>
+                        </div>
+                        <div className="user-list">
+                            {userListItems.map((listItem, idx) => {
+                                return (
+                                    <div
+                                        key={`user-list-${idx}`}
+                                        className={`user-list-item ${listItem.isCrossedOff ? "item-crossed-off" : ""}`}
+                                    >
+                                        <div className="crossed-off-line" />
+                                        <div className="item-id">{listItem.id}</div>
+                                        <div className="item-name">{listItem.name}</div>
+                                        <div className="item-quantity">{listItem.quantity}</div>
+                                        <div className="item-actions">
+                                            <IconButton
+                                                className="complete-item-icon"
+                                                onClick={() => {
+                                                    if (!listItem.isCrossedOff) {
+                                                        crossItemOffList(idx);
+                                                    }
+                                                }}
+                                            >
+                                                <CheckCircleOutlined />
+                                            </IconButton>
+                                            <IconButton
+                                                className="remove-item-icon"
+                                                onClick={() => {
+                                                    removeItemFromList(idx);
+                                                }}
+                                            >
+                                                <RemoveCircleOutlined />
+                                            </IconButton>
+                                        </div>
                                     </div>
-                                </div>
-                            );
+                                );
+                            })}
+                        </div>
+                    </div>
+                    {/* Every ad zone after the first is displayed here, below the shopping
+                    list, so they occupy a different area of the screen than the first
+                    zone and scroll independently of it. */}
+                    <div className="ad-units secondary-ad-units" id="secondaryAdUnitsSection">
+                        {sdkAppDetails.zonePlacements.slice(1).map((zone, idx) => {
+                            return renderAdZonePlacement(zone, idx + 1);
                         })}
                     </div>
                 </div>
                 <div className="view-gutter" />
-                <div className="ad-units" id="adUnitsSection">
-                    {sdkAppDetails.zonePlacements.map((zone, idx) => {
-                        return (
-                            <div
-                                key={`zone-placement-${idx}`}
-                                id={`zone${idx + 1}`}
-                                className="ad-zone"
-                                style={{ width: `${zone.width}px`, height: `${zone.height}px` }}
-                            />
-                        );
+                {/* The first ad zone keeps its own column, off to the side of the list. */}
+                <div className="ad-units primary-ad-units" id="adUnitsSection">
+                    {sdkAppDetails.zonePlacements.slice(0, 1).map((zone, idx) => {
+                        return renderAdZonePlacement(zone, idx);
                     })}
                 </div>
                 <Dialog className="pending-atl-items-dialog" open={!!pendingAtlItems && pendingAtlItems.length > 0}>
