@@ -2487,6 +2487,79 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(true);
         });
 
+        it("reports on a blur event even if document.hasFocus() has not caught up", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            // Some browsers fire blur before document.hasFocus() flips. Deriving the
+            // state from hasFocus() there would drop the transition, so the event is
+            // treated as proof on its own. hasFocus deliberately still reports true.
+            expect(document.hasFocus()).toBe(true);
+
+            window.dispatchEvent(new Event("blur"));
+
+            await flushPromises();
+
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+            ).toHaveLength(1);
+            expect(testSdk.sessionIsBackgrounded).toBe(true);
+        });
+
+        it("reports on a focus event even if document.hasFocus() has not caught up", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            window.dispatchEvent(new Event("blur"));
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            // Still reporting unfocused, yet the focus event alone must foreground.
+            Object.defineProperty(document, "hasFocus", {
+                configurable: true,
+                writable: true,
+                value: () => false,
+            });
+
+            window.dispatchEvent(new Event("focus"));
+
+            await flushPromises();
+
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_RESUMED"),
+            ).toHaveLength(1);
+            expect(testSdk.sessionIsBackgrounded).toBe(false);
+        });
+
+        it("does not foreground on a focus event while the tab is still hidden", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            setDocumentVisibility("hidden");
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            window.dispatchEvent(new Event("focus"));
+
+            await flushPromises();
+
+            // Focused but not on screen is still backgrounded.
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_RESUMED"),
+            ).toHaveLength(0);
+            expect(testSdk.sessionIsBackgrounded).toBe(true);
+        });
+
         it("reports the event once per transition, not once per signal", async () => {
             const testSdk = sdk!;
 

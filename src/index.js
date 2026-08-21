@@ -1100,7 +1100,7 @@ class AdadaptedJsSdk {
         window.addEventListener(
             "blur",
             () => {
-                this.#updateSessionActivity();
+                this.#updateSessionActivity(true);
             },
             listenerOptions,
         );
@@ -1108,7 +1108,7 @@ class AdadaptedJsSdk {
         window.addEventListener(
             "focus",
             () => {
-                this.#updateSessionActivity();
+                this.#updateSessionActivity(false);
             },
             listenerOptions,
         );
@@ -1151,8 +1151,15 @@ class AdadaptedJsSdk {
      * focus change - so the events are driven off the tracked state rather than off
      * the individual listeners.
      */
-    #updateSessionActivity() {
-        const isBackgrounded = this.#isPageBackgrounded();
+    #updateSessionActivity(backgroundedHint) {
+        // A blur or focus event is itself proof of the transition, so the hint it
+        // passes is trusted over re-reading document.hasFocus(). Some browsers have
+        // not updated hasFocus() yet at the moment the event fires, and deriving the
+        // state from it there would drop the transition entirely.
+        const isBackgrounded =
+            backgroundedHint === undefined
+                ? this.#isPageBackgrounded()
+                : backgroundedHint || document.visibilityState === "hidden";
 
         if (isBackgrounded === this.sessionIsBackgrounded) {
             return;
