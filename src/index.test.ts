@@ -314,6 +314,21 @@ const getAdRequestBodies = (fetchMock: FetchMock) => {
 describe("AdadaptedJsSdk", () => {
     let sdk: AdadaptedJsSdk | null = null;
     let fetchMock: FetchMock;
+    // Every instance a test builds, so afterEach can tear all of them down. A
+    // leaked instance keeps its document listeners and answers the next test's
+    // visibilitychange, which produces failures in whichever test runs next.
+    let liveSdks: AdadaptedJsSdk[] = [];
+
+    /**
+     * Builds an SDK instance that is guaranteed to be unmounted after the test.
+     */
+    const createSdk = (): AdadaptedJsSdk => {
+        const instance = new AdadaptedJsSdk();
+
+        liveSdks.push(instance);
+
+        return instance;
+    };
 
     beforeEach(() => {
         fetchMock = mockFetch();
@@ -334,13 +349,18 @@ describe("AdadaptedJsSdk", () => {
 
         (global as any).MockIntersectionObserver.reset();
 
-        sdk = new AdadaptedJsSdk();
+        liveSdks = [];
+        sdk = createSdk();
     });
 
     afterEach(() => {
         // Tears down the document listeners and observers, so a previous test's SDK
         // can't react to events raised by the next one.
-        sdk?.unmount();
+        for (const instance of liveSdks) {
+            instance.unmount();
+        }
+
+        liveSdks = [];
 
         jest.resetAllMocks();
     });
@@ -349,49 +369,49 @@ describe("AdadaptedJsSdk", () => {
         it("rejects when apiKey isn't provided", async () => {
             const testSdk = sdk!;
 
-            try {
-                await testSdk.initialize({
+            // Asserted through rejects, so deleting the validation fails the test
+            // instead of skipping an untaken catch block.
+            await expect(
+                testSdk.initialize({
                     ...baseTestProps,
                     // @ts-ignore
                     apiKey: undefined,
-                });
-            } catch (message) {
-                expect(message).toBe(
-                    "API key must be provided for the AdAdapted SDK to be initialized.",
-                );
-            }
+                }),
+            ).rejects.toBe(
+                "API key must be provided for the AdAdapted SDK to be initialized.",
+            );
         });
 
         it("rejects when advertiserId isn't provided", async () => {
             const testSdk = sdk!;
 
-            try {
-                await testSdk.initialize({
+            // Asserted through rejects, so deleting the validation fails the test
+            // instead of skipping an untaken catch block.
+            await expect(
+                testSdk.initialize({
                     ...baseTestProps,
                     // @ts-ignore
                     advertiserId: undefined,
-                });
-            } catch (message) {
-                expect(message).toBe(
-                    "A unique identifier(advertiserId) must be provided for the AdAdapted SDK to be initialized.",
-                );
-            }
+                }),
+            ).rejects.toBe(
+                "A unique identifier(advertiserId) must be provided for the AdAdapted SDK to be initialized.",
+            );
         });
 
         it("rejects when allowRetargeting isn't provided", async () => {
             const testSdk = sdk!;
 
-            try {
-                await testSdk.initialize({
+            // Asserted through rejects, so deleting the validation fails the test
+            // instead of skipping an untaken catch block.
+            await expect(
+                testSdk.initialize({
                     ...baseTestProps,
                     // @ts-ignore
                     allowRetargeting: undefined,
-                });
-            } catch (message) {
-                expect(message).toBe(
-                    "A user's privacy decision to opt-in or opt-out for ad retargeting(allowRetargeting) must be provided for the AdAdapted SDK to be initialized.",
-                );
-            }
+                }),
+            ).rejects.toBe(
+                "A user's privacy decision to opt-in or opt-out for ad retargeting(allowRetargeting) must be provided for the AdAdapted SDK to be initialized.",
+            );
         });
 
         it("still resolves when the ad requests fail, since there is no session request to fail", async () => {
@@ -500,128 +520,66 @@ describe("AdadaptedJsSdk", () => {
         });
     });
 
-    describe("onAdZonesRefreshed()", () => {
-        it("is undefined", async () => {
+    describe("client callbacks", () => {
+        // NOTE: These cover defaulting and wiring only. That each callback fires at
+        //       the right moment, with the right payload, is covered by the ad
+        //       serving, attribution and review-regression suites.
+        it("defaults every callback to a no-op, so omitting them cannot throw", async () => {
             const testSdk = sdk!;
 
-            await testSdk.initialize(baseTestProps);
+            await testSdk.initialize({
+                apiKey: baseTestProps.apiKey,
+                advertiserId: baseTestProps.advertiserId,
+                allowRetargeting: true,
+            });
+            await flushPromises();
 
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onAdZonesRefreshed()).toBeUndefined();
+            expect(() => testSdk.onAdZonesRefreshed()).not.toThrow();
+            expect(() => testSdk.onAddItemsTriggered([])).not.toThrow();
+            expect(() =>
+                testSdk.onExternalContentAdClicked("AD_ID"),
+            ).not.toThrow();
+            expect(() => testSdk.onPayloadsAvailable([])).not.toThrow();
+            expect(() => testSdk.onAdsRetrieved({})).not.toThrow();
         });
 
-        it("is defined", async () => {
+        it("adopts each callback the client supplies", async () => {
+            const callbacks = {
+                onAdZonesRefreshed: jest.fn(),
+                onAddItemsTriggered: jest.fn(),
+                onExternalContentAdClicked: jest.fn(),
+                onPayloadsAvailable: jest.fn(),
+                onAdsRetrieved: jest.fn(),
+            };
+            const testSdk = sdk!;
+
+            await testSdk.initialize({ ...baseTestProps, ...callbacks });
+
+            for (const name of Object.keys(callbacks)) {
+                expect((testSdk as any)[name]).toBe((callbacks as any)[name]);
+            }
+        });
+
+        it("does not let one client callback's failure stop the others", async () => {
+            const consoleErrorSpy = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => {});
+            const onAdsRetrieved = jest.fn(() => {
+                throw new Error("client blew up");
+            });
             const testSdk = sdk!;
 
             await testSdk.initialize({
                 ...baseTestProps,
-                onAdZonesRefreshed: () => {
-                    return "defined";
-                },
+                onAdsRetrieved,
             });
+            await setZonesOnScreen(true);
 
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onAdZonesRefreshed()).toBe("defined");
-        });
-    });
+            expect(onAdsRetrieved).toHaveBeenCalled();
+            // The throw is contained rather than escaping into ad serving.
+            expect(getReportedAdEvents(fetchMock, "impression").length).toBe(2);
 
-    describe("onAddItemsTriggered()", () => {
-        it("is undefined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize(baseTestProps);
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onAddItemsTriggered()).toBeUndefined();
-        });
-
-        it("is defined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize({
-                ...baseTestProps,
-                onAddItemsTriggered: () => {
-                    return "defined";
-                },
-            });
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onAddItemsTriggered()).toBe("defined");
-        });
-    });
-
-    describe("onExternalContentAdClicked()", () => {
-        it("is undefined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize(baseTestProps);
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onExternalContentAdClicked()).toBeUndefined();
-        });
-
-        it("is defined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize({
-                ...baseTestProps,
-                onExternalContentAdClicked: () => {
-                    return "defined";
-                },
-            });
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onExternalContentAdClicked()).toBe("defined");
-        });
-    });
-
-    describe("onPayloadsAvailable()", () => {
-        it("is undefined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize(baseTestProps);
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onPayloadsAvailable()).toBeUndefined();
-        });
-
-        it("is defined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize({
-                ...baseTestProps,
-                onPayloadsAvailable: () => {
-                    return "defined";
-                },
-            });
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onPayloadsAvailable()).toBe("defined");
-        });
-    });
-
-    describe("onAdsRetrieved()", () => {
-        it("is undefined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize(baseTestProps);
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onAdsRetrieved()).toBeUndefined();
-        });
-
-        it("is defined", async () => {
-            const testSdk = sdk!;
-
-            await testSdk.initialize({
-                ...baseTestProps,
-                onAdsRetrieved: () => {
-                    return "defined";
-                },
-            });
-
-            expect(fetch).toHaveBeenCalled();
-            expect(testSdk.onAdsRetrieved()).toBe("defined");
+            consoleErrorSpy.mockRestore();
         });
     });
 
@@ -1397,7 +1355,7 @@ describe("AdadaptedJsSdk", () => {
 
             testSdk.updateStoreId(testStoreId);
 
-            expect(testSdk.params.storeId).toBe(testStoreId);
+            expect(testSdk.params?.storeId).toBe(testStoreId);
         });
 
         it("requests a new ad for every mounted zone using the new store ID", async () => {
@@ -1683,6 +1641,357 @@ describe("AdadaptedJsSdk", () => {
         });
     });
 
+    describe("event attribution", () => {
+        it("reports the served ad's identity on the impression, not just the zone", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            const impressions = getReportedAdEvents(fetchMock, "impression");
+
+            // ad_id and impression_id are what the impression is attributed and
+            // billed against, so they are asserted rather than just counted.
+            expect(impressions).toHaveLength(2);
+            expect(
+                impressions.find((event) => event.zone_id === TEST_ZONE_1_ID),
+            ).toEqual({
+                ad_id: testAtlAd.id,
+                zone_id: TEST_ZONE_1_ID,
+                impression_id: testAtlAd.impression_id,
+                event_type: "impression",
+                created_at: expect.any(Number),
+            });
+            expect(
+                impressions.find((event) => event.zone_id === TEST_ZONE_2_ID),
+            ).toEqual({
+                ad_id: testPopupAd.id,
+                zone_id: TEST_ZONE_2_ID,
+                impression_id: testPopupAd.impression_id,
+                event_type: "impression",
+                created_at: expect.any(Number),
+            });
+        });
+
+        it("reports the same ad identity on impression_end as on the impression", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+            await setZonesOnScreen(false);
+
+            const ended = getReportedAdEvents(fetchMock, "impression_end").find(
+                (event) => event.zone_id === TEST_ZONE_1_ID,
+            );
+
+            expect(ended.ad_id).toBe(testAtlAd.id);
+            expect(ended.impression_id).toBe(testAtlAd.impression_id);
+        });
+
+        it("reports the clicked ad's identity on the interaction", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            document
+                .querySelector<HTMLElement>("#zone1 .clickable-area")!
+                .click();
+            testSdk.acknowledgeAdded();
+
+            await flushPromises();
+
+            const interactions = getReportedAdEvents(fetchMock, "interaction");
+
+            expect(interactions).toHaveLength(1);
+            expect(interactions[0].ad_id).toBe(testAtlAd.id);
+            expect(interactions[0].impression_id).toBe(testAtlAd.impression_id);
+        });
+
+        it("transmits the retargeting decision and the locale, which no longer ride on a session request", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                allowRetargeting: false,
+                deviceLocale: "en-GB",
+            });
+            await flushPromises();
+
+            const sdkEventBody = fetchMock.mock.calls
+                .filter(([url]) => (url as string).includes(SDK_EVENTS_URL))
+                .map(([, init]) => JSON.parse((init as any).body))[0];
+
+            expect(sdkEventBody.allow_retargeting).toBe(0);
+            expect(sdkEventBody.locale).toBe("en-GB");
+        });
+
+        it("sends the retargeting opt-in as 1", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                allowRetargeting: true,
+            });
+            await flushPromises();
+
+            const sdkEventBody = fetchMock.mock.calls
+                .filter(([url]) => (url as string).includes(SDK_EVENTS_URL))
+                .map(([, init]) => JSON.parse((init as any).body))[0];
+
+            expect(sdkEventBody.allow_retargeting).toBe(1);
+        });
+    });
+
+    describe("teardown safety", () => {
+        it("drops an ad response that arrives after unmount instead of reviving the zone", async () => {
+            // Hold every ad request open so unmount() lands while they are all in
+            // flight, and keep all the resolvers so none is left pending.
+            const pendingResolvers: Array<() => void> = [];
+
+            fetchMock = jest.fn((url: string) => {
+                if (url.includes(AD_RETRIEVE_URL)) {
+                    return new Promise((resolve) => {
+                        pendingResolvers.push(() =>
+                            resolve({
+                                ok: true,
+                                status: 200,
+                                json: () =>
+                                    Promise.resolve(buildAdResponse(testAtlAd)),
+                            }),
+                        );
+                    });
+                }
+
+                return jsonResponse({});
+            }) as FetchMock;
+
+            // @ts-ignore
+            global.fetch = fetchMock;
+
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+
+            const zones = Object.keys(testSdk.zones).map(
+                (zoneId) => testSdk.zones[zoneId],
+            );
+
+            expect(zones.length).toBe(2);
+            expect(pendingResolvers.length).toBe(2);
+
+            zones.forEach((zone) => {
+                zone.isIntersecting = true;
+            });
+
+            testSdk.unmount();
+
+            fetchMock.mockClear();
+            pendingResolvers.forEach((release) => release());
+
+            await flushPromises();
+            await flushPromises();
+
+            // Nothing may be rendered, impressed or timed for a zone the client has
+            // already discarded, and no follow-up request may go out.
+            expect(document.getElementById("zone1")!.innerHTML).toBe("");
+            expect(document.getElementById("zone2")!.innerHTML).toBe("");
+            expect(getReportedAdEvents(fetchMock, "impression")).toHaveLength(
+                0,
+            );
+            expect(getAdRequestBodies(fetchMock)).toHaveLength(0);
+
+            for (const zone of zones) {
+                expect(zone.timerRunning).toBe(false);
+                expect(zone.currentAd).toBeUndefined();
+            }
+        });
+
+        it("removes an open popover and restores body scrolling on unmount", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            document
+                .querySelector<HTMLElement>("#zone2 .clickable-area")!
+                .click();
+
+            expect(document.getElementsByClassName("AdPopup")).toHaveLength(1);
+            expect(document.body.style.overflow).toBe("hidden");
+
+            testSdk.unmount();
+
+            expect(document.getElementsByClassName("AdPopup")).toHaveLength(0);
+            expect(document.body.style.overflow).not.toBe("hidden");
+        });
+    });
+
+    describe("resilience", () => {
+        it("keeps serving when a client callback throws", async () => {
+            const consoleErrorSpy = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => {});
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAdsRetrieved: () => {
+                    throw new Error("client blew up");
+                },
+            });
+            await setZonesOnScreen(true);
+
+            // The client's failure must not cost the zone its refresh timer or its
+            // impression, or the zone would sit dead for the life of the page. Both
+            // are armed before control passes to client code, and the throw is
+            // contained rather than escaping into the SDK.
+            expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(true);
+            expect(testSdk.zones[TEST_ZONE_1_ID].impressionTracked).toBe(true);
+            expect(
+                getReportedAdEvents(fetchMock, "impression").length,
+            ).toBeGreaterThan(0);
+
+            // And the zone keeps rotating afterwards rather than stalling. The
+            // countdown has to be paused first, because resuming a running timer is
+            // correctly a no-op.
+            await setZonesOnScreen(false);
+
+            fetchMock.mockClear();
+            testSdk.zones[TEST_ZONE_1_ID].adFetchedAt = 0;
+
+            await setZonesOnScreen(true);
+
+            expect(
+                getAdRequestBodies(fetchMock).filter(
+                    (request) => request.zoneId === TEST_ZONE_1_ID,
+                ).length,
+            ).toBeGreaterThan(0);
+
+            consoleErrorSpy.mockRestore();
+        });
+
+        it("re-points a zone at a replacement container with the same element ID", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            const originalElement = document.getElementById("zone1")!;
+
+            // Stand in for a framework remount: same ID, brand new node.
+            const replacement = document.createElement("div");
+            replacement.id = "zone1";
+            originalElement.replaceWith(replacement);
+
+            getObserver().trigger(originalElement, false);
+
+            await flushPromises();
+
+            // The zone survives and its ad is put back into the new node.
+            expect(testSdk.zones[TEST_ZONE_1_ID]).toBeDefined();
+            expect(testSdk.zones[TEST_ZONE_1_ID].containerElement).toBe(
+                replacement,
+            );
+            expect(replacement.querySelector("iframe.ad-frame")).toBeTruthy();
+        });
+
+        it("reports one interaction for a double click on the same ad", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            // zone2 carries a popover ad, which reports its interaction on click
+            // rather than deferring it, so a duplicate is visible immediately.
+            const clickable = document.querySelector<HTMLElement>(
+                "#zone2 .clickable-area",
+            )!;
+
+            clickable.click();
+            clickable.click();
+
+            await flushPromises();
+
+            expect(getReportedAdEvents(fetchMock, "interaction")).toHaveLength(
+                1,
+            );
+            // A second popover would stack on the first, both sharing one element
+            // ID, leaving the user unable to dismiss the top one.
+            expect(document.getElementsByClassName("AdPopup")).toHaveLength(1);
+        });
+
+        it("applies a store change that happened while a request was in flight", async () => {
+            // Every initial ad request is held open, so the store change lands while
+            // both zones still have a request outstanding.
+            const pendingResolvers: Array<() => void> = [];
+            let holdRequests = true;
+
+            fetchMock = jest.fn((url: string) => {
+                if (url.includes(AD_RETRIEVE_URL)) {
+                    if (holdRequests) {
+                        return new Promise((resolve) => {
+                            pendingResolvers.push(() =>
+                                resolve({
+                                    ok: true,
+                                    status: 200,
+                                    json: () =>
+                                        Promise.resolve(
+                                            buildAdResponse(testAtlAd),
+                                        ),
+                                }),
+                            );
+                        });
+                    }
+
+                    return jsonResponse(buildAdResponse(testAtlAd));
+                }
+
+                return jsonResponse({});
+            }) as FetchMock;
+
+            // @ts-ignore
+            global.fetch = fetchMock;
+
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+
+            Object.keys(testSdk.zones).forEach((zoneId) => {
+                testSdk.zones[zoneId].isIntersecting = true;
+            });
+
+            expect(pendingResolvers.length).toBeGreaterThan(0);
+
+            // Change the store while those requests are still outstanding.
+            testSdk.updateStoreId(testStoreId);
+
+            expect(
+                getAdRequestBodies(fetchMock).some(
+                    (request) => request.storeId === testStoreId,
+                ),
+            ).toBe(false);
+
+            // Let the outstanding requests settle, which should drain the queued
+            // refetch rather than dropping the store change.
+            holdRequests = false;
+            pendingResolvers.forEach((release) => release());
+
+            await flushPromises();
+            await flushPromises();
+
+            expect(
+                getAdRequestBodies(fetchMock).filter(
+                    (request) => request.storeId === testStoreId,
+                ).length,
+            ).toBeGreaterThan(0);
+        });
+    });
+
     describe("session handling", () => {
         it("generates a session ID in the JS + 32 character format", async () => {
             const testSdk = sdk!;
@@ -1731,7 +2040,7 @@ describe("AdadaptedJsSdk", () => {
             sdk!.unmount();
 
             // A second SDK instance stands in for a fresh page load.
-            const reloadedSdk = new AdadaptedJsSdk();
+            const reloadedSdk = createSdk();
 
             fetchMock.mockClear();
 
@@ -1770,7 +2079,7 @@ describe("AdadaptedJsSdk", () => {
 
             sdk!.unmount();
 
-            const reloadedSdk = new AdadaptedJsSdk();
+            const reloadedSdk = createSdk();
 
             fetchMock.mockClear();
 
@@ -1819,6 +2128,281 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(testSdk.getSessionId()).toBe(originalSessionId);
+        });
+    });
+
+    describe("review regressions", () => {
+        it("does not rotate the session while the tab stays visible", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            const originalSessionId = testSdk.getSessionId();
+
+            // Stand in for a tab that has been open and in use for longer than the
+            // session window. Nothing refreshed either copy of the stamp, so both go
+            // stale together - that is exactly the state the bug produced. Being
+            // visible IS activity, so the window must slide and the session survive
+            // rather than the visit splitting in two.
+            const storageKey = Object.keys(localStorage).find((key) =>
+                key.startsWith("aa-session-v2-"),
+            )!;
+            const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
+            const staleTimestamp = Date.now() - 31 * 60 * 1000;
+
+            localStorage.setItem(
+                storageKey,
+                JSON.stringify({
+                    ...storedSession,
+                    lastActiveAt: staleTimestamp,
+                }),
+            );
+            testSdk.sessionLastActiveAt = staleTimestamp;
+            testSdk.sessionPersistedAt = staleTimestamp;
+
+            fetchMock.mockClear();
+            testSdk.reportItemsAddedToList(["Milk"], "My List");
+
+            await flushPromises();
+
+            expect(testSdk.getSessionId()).toBe(originalSessionId);
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_CREATED"),
+            ).toHaveLength(0);
+        });
+
+        it("does rotate the session once the tab has been hidden past the window", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+
+            const originalSessionId = testSdk.getSessionId();
+
+            setDocumentVisibility("hidden");
+
+            // Age both the in-memory stamp and the stored record, which is what a
+            // tab genuinely left hidden for half an hour looks like. Ageing only the
+            // in-memory copy would be resolved back to the fresh stored session.
+            const storageKey = Object.keys(localStorage).find((key) =>
+                key.startsWith("aa-session-v2-"),
+            )!;
+            const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
+            const staleTimestamp = Date.now() - 31 * 60 * 1000;
+
+            localStorage.setItem(
+                storageKey,
+                JSON.stringify({
+                    ...storedSession,
+                    lastActiveAt: staleTimestamp,
+                }),
+            );
+            testSdk.sessionLastActiveAt = staleTimestamp;
+
+            fetchMock.mockClear();
+            testSdk.reportItemsAddedToList(["Milk"], "My List");
+
+            await flushPromises();
+
+            expect(testSdk.getSessionId()).not.toBe(originalSessionId);
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_CREATED"),
+            ).toHaveLength(1);
+        });
+
+        it("keys the stored session by API key and environment", async () => {
+            await sdk!.initialize(baseTestProps);
+            await flushPromises();
+
+            const firstId = sdk!.getSessionId();
+            const firstKey = Object.keys(localStorage).find((key) =>
+                key.startsWith("aa-session-v2-"),
+            )!;
+
+            sdk!.unmount();
+
+            // A different app must not inherit the first app's session.
+            const otherSdk = createSdk();
+
+            await otherSdk.initialize({
+                ...baseTestProps,
+                apiKey: "A_COMPLETELY_DIFFERENT_KEY",
+            });
+            await flushPromises();
+
+            const secondKey = Object.keys(localStorage).find(
+                (key) => key.startsWith("aa-session-v2-") && key !== firstKey,
+            );
+
+            expect(secondKey).toBeDefined();
+            expect(otherSdk.getSessionId()).not.toBe(firstId);
+        });
+
+        it("sends impression_end with keepalive when the tab is hidden", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            // A tab close fires visibilitychange(hidden) before pagehide, so this is
+            // the call that actually reports the event. Without keepalive the
+            // request dies with the document and the impression is never closed.
+            setDocumentVisibility("hidden");
+
+            await flushPromises();
+
+            const impressionEndCalls = fetchMock.mock.calls.filter(
+                ([url, init]) =>
+                    (url as string).includes(AD_EVENTS_URL) &&
+                    (init as any).body.includes("impression_end"),
+            );
+
+            expect(impressionEndCalls).toHaveLength(2);
+
+            for (const [, init] of impressionEndCalls) {
+                expect((init as any).keepalive).toBe(true);
+            }
+        });
+
+        it("does not report zones as unmounted when the page enters the back/forward cache", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            const bfCacheEvent = new Event("pagehide") as any;
+            Object.defineProperty(bfCacheEvent, "persisted", { value: true });
+            window.dispatchEvent(bfCacheEvent);
+
+            await flushPromises();
+
+            // A suspended page can be restored and shown again, so reporting the
+            // zones as unmounted here would leave mount/unmount unbalanced.
+            expect(
+                getReportedAdEvents(fetchMock, "zone_unmounted"),
+            ).toHaveLength(0);
+            expect(testSdk.zones[TEST_ZONE_1_ID].mounted).toBe(true);
+        });
+
+        it("holds the zone_unfilled report until the zone is actually on screen", async () => {
+            fetchMock = mockFetch({ adsByZoneId: {} });
+
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            // The ad request can settle before the observer has reported the zone's
+            // starting position, and the report must not be lost to that race.
+            expect(
+                getReportedAdEvents(fetchMock, "zone_unfilled"),
+            ).toHaveLength(0);
+
+            await setZonesOnScreen(true);
+
+            expect(
+                getReportedAdEvents(fetchMock, "zone_unfilled"),
+            ).toHaveLength(2);
+        });
+
+        it("does not impress or rotate zones sitting behind an open popover", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(false);
+
+            // Open the popover from zone2 while zone1 is still off screen.
+            document
+                .querySelector<HTMLElement>("#zone2 .clickable-area")!
+                .click();
+
+            expect(document.getElementsByClassName("AdPopup")).toHaveLength(1);
+
+            fetchMock.mockClear();
+
+            // Scrolling zone1 into view behind the overlay must not count, because
+            // the popover covers the entire viewport.
+            await setZonesOnScreen(true);
+
+            expect(getReportedAdEvents(fetchMock, "impression")).toHaveLength(
+                0,
+            );
+            expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(false);
+        });
+
+        it("pairs impression and impression_end across several rotations", async () => {
+            jest.useFakeTimers({ doNotFake: ["setImmediate"] });
+
+            try {
+                fetchMock = mockFetch({
+                    adsByZoneId: { [TEST_ZONE_1_ID]: testAtlAd },
+                });
+
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await setZonesOnScreen(true);
+
+                fetchMock.mockClear();
+
+                for (let cycle = 0; cycle < 3; cycle++) {
+                    jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+
+                    await flushPromises();
+                }
+
+                const forZoneOne = (eventType: string) =>
+                    getReportedAdEvents(fetchMock, eventType).filter(
+                        (event) => event.zone_id === TEST_ZONE_1_ID,
+                    );
+
+                // Each rotation closes the outgoing ad and opens the incoming one,
+                // so the two stay one-to-one however many times the zone cycles.
+                expect(forZoneOne("impression_end")).toHaveLength(3);
+                expect(forZoneOne("impression")).toHaveLength(3);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it("fires onAdZonesRefreshed per rotation, but not for a zone's first ad", async () => {
+            jest.useFakeTimers({ doNotFake: ["setImmediate"] });
+
+            try {
+                const onAdZonesRefreshed = jest.fn();
+
+                fetchMock = mockFetch({
+                    adsByZoneId: { [TEST_ZONE_1_ID]: testAtlAd },
+                });
+
+                const testSdk = sdk!;
+
+                await testSdk.initialize({
+                    ...baseTestProps,
+                    zonePlacements: { [TEST_ZONE_1_ID]: "zone1" },
+                    onAdZonesRefreshed,
+                });
+                await setZonesOnScreen(true);
+
+                // The first ad is a first display, not a refresh.
+                expect(onAdZonesRefreshed).not.toHaveBeenCalled();
+
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+                await flushPromises();
+
+                expect(onAdZonesRefreshed).toHaveBeenCalledTimes(1);
+
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+                await flushPromises();
+
+                expect(onAdZonesRefreshed).toHaveBeenCalledTimes(2);
+            } finally {
+                jest.useRealTimers();
+            }
         });
     });
 

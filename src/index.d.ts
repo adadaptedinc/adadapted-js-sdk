@@ -19,13 +19,14 @@ declare class AdadaptedJsSdk {
     sessionId: any;
     sessionCreatedAt: number | undefined;
     sessionLastActiveAt: number | undefined;
+    sessionPersistedAt: number | undefined;
     lastSelectedATL: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
     initialBodyOverflowStyle: string;
-    scrollContainerId: string;
-    deviceLocale: string;
-    params: { [key: string]: any };
+    scrollContainerId: string | undefined;
+    deviceLocale: string | undefined;
+    params: { [key: string]: any } | undefined;
     /**
      * Map of {Zone ID -> internal zone state}. Each zone owns its own ad request,
      * refresh countdown, and impression tracking.
@@ -39,16 +40,18 @@ declare class AdadaptedJsSdk {
     documentEventAbortController: any;
     hashedApiKey: string | undefined;
     onAdZonesRefreshed: () => void;
-    onAddItemsTriggered: () => void;
-    onExternalContentAdClicked: () => void;
-    onPayloadsAvailable: () => void;
-    onAdsRetrieved: () => void;
+    onAddItemsTriggered: (items: AdadaptedJsSdk.DetailedListItem[]) => void;
+    onExternalContentAdClicked: (adId: string) => void;
+    onPayloadsAvailable: (payloads: AdadaptedJsSdk.Payload[]) => void;
+    onAdsRetrieved: (adZoneAdAvailabilityMap: {
+        [key: string]: boolean;
+    }) => void;
     /**
      * Gets the current session ID.
      * NOTE: This is only exposed for developer validation if needed.
      * @returns the current session ID.
      */
-    getSessionId(): string;
+    getSessionId(): string | undefined;
     /**
      * Gets all available keyword intercepts.
      * NOTE: This is only exposed for developer validation if needed.
@@ -504,6 +507,21 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
+     * The available ad action types.
+     * - "c"  add to list
+     * - "e"  open a URL in a new tab
+     * - "l"  open a URL in an in-page view
+     * - "p"  open a URL in an in-page view, same behaviour as "l"
+     * - "a"  open an app store URL
+     * - "n"  no action
+     * NOTE: Declared inside this namespace rather than at the top level of the
+     *       file, because the `export =` on line 1 cannot coexist with another top
+     *       level export - TypeScript rejects that with TS2309 in the consumer's
+     *       build, and this repo's own skipLibCheck hides it.
+     */
+    export type AdActionType = "c" | "e" | "l" | "p" | "a" | "n";
+
+    /**
      * The definition of an Ad.
      */
     export interface Ad {
@@ -551,9 +569,11 @@ declare namespace AdadaptedJsSdk {
      */
     export interface AdPayload {
         /**
-         * ?
+         * The items to add to the user's list or cart.
+         * NOTE: Optional, because the API sends an empty payload object for an ad
+         *       that carries no items.
          */
-        detailed_list_items: DetailedListItem[];
+        detailed_list_items?: DetailedListItem[];
     }
 }
 
@@ -590,5 +610,3 @@ declare namespace AdadaptedJsSdk {
 //      */
 //     NONE = "n",
 // }
-
-export type AdActionType = "c" | "e" | "l" | "p" | "a" | "n";
