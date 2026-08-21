@@ -20,6 +20,11 @@ declare class AdadaptedJsSdk {
     sessionCreatedAt: number | undefined;
     sessionLastActiveAt: number | undefined;
     sessionPersistedAt: number | undefined;
+    /**
+     * True while the page is not the user's current focus, either because the tab
+     * is not the shown tab or because the browser is not the focused application.
+     */
+    sessionIsBackgrounded: boolean;
     lastSelectedATL: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;

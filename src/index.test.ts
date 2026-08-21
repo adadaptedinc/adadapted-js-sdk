@@ -281,6 +281,22 @@ const setDocumentVisibility = (visibilityState: "visible" | "hidden") => {
 };
 
 /**
+ * Sets whether the document currently has focus, standing in for the browser
+ * itself gaining or losing focus to another application while this tab stays on
+ * screen. NOTE: jsdom's document.hasFocus() returns false by default, so a focused
+ * page has to be modelled explicitly.
+ */
+const setDocumentFocus = (hasFocus: boolean) => {
+    Object.defineProperty(document, "hasFocus", {
+        configurable: true,
+        writable: true,
+        value: () => hasFocus,
+    });
+
+    window.dispatchEvent(new Event(hasFocus ? "focus" : "blur"));
+};
+
+/**
  * Every ad event of the given type that was reported to the API.
  */
 const getReportedAdEvents = (fetchMock: FetchMock, eventType: string) => {
@@ -342,10 +358,11 @@ describe("AdadaptedJsSdk", () => {
         // one test would be resumed by the next.
         localStorage.clear();
 
-        // setDocumentVisibility defines an own property on the shared jsdom
-        // document, so a test that leaves the tab hidden would hide it for every
-        // test that follows.
+        // These define own properties on the shared jsdom document, so a test that
+        // leaves the tab hidden or unfocused would leave it that way for every test
+        // that follows. A normal page is visible and focused.
         setDocumentVisibility("visible");
+        setDocumentFocus(true);
 
         (global as any).MockIntersectionObserver.reset();
 
@@ -2403,6 +2420,174 @@ describe("AdadaptedJsSdk", () => {
             } finally {
                 jest.useRealTimers();
             }
+        });
+    });
+
+    describe("SESSION_BACKGROUNDED", () => {
+        it("reports when the tab stops being the shown tab", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            setDocumentVisibility("hidden");
+
+            await flushPromises();
+
+            const backgrounded = getReportedSdkEvents(
+                fetchMock,
+                "SESSION_BACKGROUNDED",
+            );
+
+            expect(backgrounded).toHaveLength(1);
+            expect(backgrounded[0].event_params.sessionId).toBe(
+                testSdk.getSessionId(),
+            );
+        });
+
+        it("reports when the browser loses focus while the tab stays on screen", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            // The user switched to another application. visibilitychange does not
+            // fire for this, so only the focus signal catches it.
+            setDocumentFocus(false);
+
+            await flushPromises();
+
+            expect(document.visibilityState).toBe("visible");
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+            ).toHaveLength(1);
+        });
+
+        it("does not pause ad serving when only focus is lost", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            setDocumentFocus(false);
+
+            await flushPromises();
+
+            // The tab is still on screen, so the ad is still in front of the user.
+            // Ending the impression here would under-count a perfectly visible ad.
+            expect(
+                getReportedAdEvents(fetchMock, "impression_end"),
+            ).toHaveLength(0);
+            expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(true);
+        });
+
+        it("reports the event once per transition, not once per signal", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            // Switching tabs raises both a focus change and a visibility change for
+            // the same transition, and neither should double report.
+            setDocumentFocus(false);
+            setDocumentVisibility("hidden");
+
+            await flushPromises();
+
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+            ).toHaveLength(1);
+        });
+
+        it("still pauses ad serving when the tab is hidden after focus was already lost", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            setDocumentFocus(false);
+
+            await flushPromises();
+            fetchMock.mockClear();
+
+            // The session is already backgrounded, so no second session event fires,
+            // but the zones must still respond to actually becoming hidden.
+            setDocumentVisibility("hidden");
+
+            await flushPromises();
+
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+            ).toHaveLength(0);
+            expect(
+                getReportedAdEvents(fetchMock, "impression_end"),
+            ).toHaveLength(2);
+            expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(false);
+        });
+
+        it("pairs with SESSION_RESUMED when the page becomes the focus again", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            setDocumentFocus(false);
+            await flushPromises();
+
+            setDocumentFocus(true);
+            await flushPromises();
+
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+            ).toHaveLength(1);
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_RESUMED"),
+            ).toHaveLength(1);
+        });
+
+        it("does not report a transition for a page that starts out unfocused", async () => {
+            setDocumentFocus(false);
+
+            const testSdk = sdk!;
+
+            fetchMock.mockClear();
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            // Opening a page in a background tab is not a transition, so only the
+            // session's own creation event belongs here.
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+            ).toHaveLength(0);
+            expect(testSdk.sessionIsBackgrounded).toBe(true);
+        });
+
+        it("stamps the session as active when backgrounding, so the window measures from then", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            testSdk.sessionLastActiveAt = 0;
+
+            setDocumentFocus(false);
+
+            await flushPromises();
+
+            // Matches markBackgrounded() in the reference client, which sets the
+            // background time before reporting.
+            expect(testSdk.sessionLastActiveAt).toBeGreaterThan(0);
         });
     });
 

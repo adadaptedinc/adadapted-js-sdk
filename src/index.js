@@ -25,6 +25,7 @@ class AdadaptedJsSdk {
         this.sessionCreatedAt = undefined;
         this.sessionLastActiveAt = undefined;
         this.sessionPersistedAt = undefined;
+        this.sessionIsBackgrounded = false;
         this.lastSelectedATL = undefined;
         this.keywordIntercepts = undefined;
         this.keywordInterceptSearchValue = "";
@@ -808,6 +809,10 @@ class AdadaptedJsSdk {
                 // Local storage being unavailable must not stop the SDK.
             }
 
+            // Seeded from the page's actual state, so a page that starts out
+            // unfocused does not immediately report a transition it never made.
+            this.sessionIsBackgrounded = this.#isPageBackgrounded();
+
             // Generates or resumes the session, reporting the matching event.
             this.#resolveSession();
 
@@ -1073,11 +1078,37 @@ class AdadaptedJsSdk {
         document.addEventListener(
             "visibilitychange",
             () => {
+                // The session transition is settled first, so any event reported by
+                // the zone handling below already carries the right session ID.
+                this.#updateSessionActivity();
+
                 if (document.visibilityState === "hidden") {
                     this.#onPageHidden();
                 } else {
                     this.#onPageVisible();
                 }
+            },
+            listenerOptions,
+        );
+
+        // A tab can stop being the user's focus without ever becoming hidden: the
+        // browser itself loses focus to another application while the tab stays on
+        // screen. visibilitychange does not fire for that, so focus is tracked too.
+        // Only the session responds to these, not the ad zones - an ad in a visible
+        // tab is still in front of the user even when the browser is not the
+        // frontmost app.
+        window.addEventListener(
+            "blur",
+            () => {
+                this.#updateSessionActivity();
+            },
+            listenerOptions,
+        );
+
+        window.addEventListener(
+            "focus",
+            () => {
+                this.#updateSessionActivity();
             },
             listenerOptions,
         );
@@ -1094,13 +1125,73 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Determines whether the page has stopped being the user's current focus. That
+     * happens two ways: the tab stops being the shown tab, or the browser itself
+     * stops being the focused application while this tab is the one on screen.
+     * @returns true if the page is currently backgrounded.
+     */
+    #isPageBackgrounded() {
+        if (document.visibilityState === "hidden") {
+            return true;
+        }
+
+        // hasFocus is what catches the browser losing focus to another app, which
+        // never raises visibilitychange. Treated as focused when unavailable, so a
+        // host without it behaves as it did before rather than reporting the session
+        // as permanently backgrounded.
+        return typeof document.hasFocus === "function"
+            ? !document.hasFocus()
+            : false;
+    }
+
+    /**
+     * Reconciles the session against whether the page is currently the user's focus,
+     * reporting an event only when that actually changes. Several signals can report
+     * the same transition - switching tabs raises both a visibility change and a
+     * focus change - so the events are driven off the tracked state rather than off
+     * the individual listeners.
+     */
+    #updateSessionActivity() {
+        const isBackgrounded = this.#isPageBackgrounded();
+
+        if (isBackgrounded === this.sessionIsBackgrounded) {
+            return;
+        }
+
+        this.sessionIsBackgrounded = isBackgrounded;
+
+        if (isBackgrounded) {
+            this.#onSessionBackgrounded();
+        } else {
+            this.#onSessionForegrounded();
+        }
+    }
+
+    /**
+     * Triggered when the page stops being the user's focus. Stamps the session as
+     * active as of now, which is what the inactivity window is measured from, and
+     * reports the event.
+     */
+    #onSessionBackgrounded() {
+        this.#touchSession(true);
+
+        this.#trackSdkEvent(this.#SdkEventName.SESSION_BACKGROUNDED, {
+            sessionId: this.sessionId,
+        });
+    }
+
+    /**
+     * Triggered when the page becomes the user's focus again. Resumes the session,
+     * or starts a new one if it was away for longer than the session window.
+     */
+    #onSessionForegrounded() {
+        this.#resolveSession();
+    }
+
+    /**
      * Triggered when the browser tab becomes visible again.
      */
     #onPageVisible() {
-        // Re-focusing the tab either resumes the session or, if the tab was hidden
-        // for long enough, starts a new one.
-        this.#resolveSession();
-
         for (const zoneId of Object.keys(this.zones)) {
             const zone = this.zones[zoneId];
 
@@ -1115,8 +1206,6 @@ class AdadaptedJsSdk {
      * mounted, so no unmount event is reported here.
      */
     #onPageHidden() {
-        this.#touchSession(true);
-
         for (const zoneId of Object.keys(this.zones)) {
             const zone = this.zones[zoneId];
 
@@ -3151,6 +3240,12 @@ class AdadaptedJsSdk {
          * or the browser tab was re-focused within the session window.
          */
         SESSION_RESUMED: "SESSION_RESUMED",
+        /**
+         * The page stopped being the user's focus, either because the tab is no
+         * longer the shown tab or because the browser itself lost focus to another
+         * application while this tab was on screen.
+         */
+        SESSION_BACKGROUNDED: "SESSION_BACKGROUNDED",
     };
 
     /**
