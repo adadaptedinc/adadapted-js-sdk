@@ -2423,6 +2423,122 @@ describe("AdadaptedJsSdk", () => {
         });
     });
 
+    describe("insecure context", () => {
+        /**
+         * Removes crypto.subtle, reproducing any http:// page that is not localhost.
+         * getRandomValues stays, because that one is available everywhere.
+         */
+        const withoutCryptoSubtle = (): (() => void) => {
+            const original = (global as any).crypto;
+
+            Object.defineProperty(global, "crypto", {
+                configurable: true,
+                value: { getRandomValues: original.getRandomValues },
+            });
+
+            return () => {
+                Object.defineProperty(global, "crypto", {
+                    configurable: true,
+                    value: original,
+                });
+            };
+        };
+
+        it("initializes, mounts zones and reports events without crypto.subtle", async () => {
+            const restore = withoutCryptoSubtle();
+
+            try {
+                const testSdk = sdk!;
+
+                // crypto.subtle is secure-context only. Depending on it took the
+                // whole SDK down on plain http hosts: initialize() rejected, so
+                // there was no session, no listeners and no zones at all.
+                await expect(
+                    testSdk.initialize(baseTestProps),
+                ).resolves.toBeUndefined();
+
+                expect(testSdk.getSessionId()).toMatch(/^JS[A-Z0-9]{32}$/);
+                expect(Object.keys(testSdk.zones)).toHaveLength(2);
+
+                await setZonesOnScreen(true);
+
+                expect(
+                    getReportedSdkEvents(fetchMock, "SESSION_CREATED"),
+                ).toHaveLength(1);
+                expect(
+                    getReportedAdEvents(fetchMock, "impression"),
+                ).toHaveLength(2);
+            } finally {
+                restore();
+            }
+        });
+
+        it("still reports the session lifecycle without crypto.subtle", async () => {
+            const restore = withoutCryptoSubtle();
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await flushPromises();
+
+                fetchMock.mockClear();
+
+                setDocumentFocus(false);
+                await flushPromises();
+
+                expect(
+                    getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+                ).toHaveLength(1);
+
+                fetchMock.mockClear();
+                setDocumentFocus(true);
+                await flushPromises();
+
+                expect(
+                    getReportedSdkEvents(fetchMock, "SESSION_RESUMED"),
+                ).toHaveLength(1);
+            } finally {
+                restore();
+            }
+        });
+
+        it("namespaces the fallback storage key so it cannot collide with the hashed one", async () => {
+            const restore = withoutCryptoSubtle();
+
+            try {
+                await sdk!.initialize(baseTestProps);
+                await flushPromises();
+
+                const fallbackKey = Object.keys(localStorage).find((key) =>
+                    key.startsWith("aa-session-v2-"),
+                )!;
+
+                expect(fallbackKey).toContain("fnv1a");
+
+                // A different API key must still get its own session.
+                sdk!.unmount();
+                localStorage.clear();
+
+                const otherSdk = createSdk();
+
+                await otherSdk.initialize({
+                    ...baseTestProps,
+                    apiKey: "A_DIFFERENT_KEY",
+                });
+                await flushPromises();
+
+                const otherKey = Object.keys(localStorage).find((key) =>
+                    key.startsWith("aa-session-v2-"),
+                )!;
+
+                expect(otherKey).not.toBe(fallbackKey);
+            } finally {
+                restore();
+            }
+        });
+    });
+
     describe("SESSION_BACKGROUNDED", () => {
         it("reports when the tab stops being the shown tab", async () => {
             const testSdk = sdk!;

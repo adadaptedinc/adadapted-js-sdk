@@ -839,13 +839,57 @@ class AdadaptedJsSdk {
      * @returns a Promise of the hashed value.
      */
     #getHashSHA256(value) {
-        const utf8 = new TextEncoder().encode(value);
+        // This hash only namespaces the session's local storage key, so it does not
+        // need to be cryptographic.
+        //
+        // crypto.subtle is restricted to secure contexts and is simply absent on an
+        // http:// page served from anything other than localhost, which covers a lot
+        // of real development and staging hosts. Letting that failure escape took
+        // the entire SDK down: initialize() rejected, so no session was created, no
+        // document listeners were attached and no ad zone was ever mounted. A
+        // non-cryptographic fallback keeps the SDK working there instead.
+        try {
+            if (
+                typeof crypto !== "undefined" &&
+                crypto.subtle &&
+                typeof crypto.subtle.digest === "function"
+            ) {
+                const utf8 = new TextEncoder().encode(value);
 
-        return crypto.subtle.digest("SHA-256", utf8).then((hashBuffer) => {
-            return Array.from(new Uint8Array(hashBuffer))
-                .map((bytes) => bytes.toString(16).padStart(2, "0"))
-                .join("");
-        });
+                return crypto.subtle
+                    .digest("SHA-256", utf8)
+                    .then((hashBuffer) => {
+                        return Array.from(new Uint8Array(hashBuffer))
+                            .map((bytes) => bytes.toString(16).padStart(2, "0"))
+                            .join("");
+                    })
+                    .catch(() => this.#getFallbackHash(value));
+            }
+        } catch {
+            // Reading crypto.subtle can itself throw in a hardened environment.
+        }
+
+        return Promise.resolve(this.#getFallbackHash(value));
+    }
+
+    /**
+     * Hashes a value without the Web Crypto API, for contexts where it isn't
+     * available. Uses FNV-1a, which is deterministic and spreads well enough to keep
+     * one app's stored session from colliding with another's.
+     * @param {string} value - The value to hash.
+     * @returns the hashed value.
+     */
+    #getFallbackHash(value) {
+        let hash = 0x811c9dc5;
+
+        for (let index = 0; index < value.length; index++) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 0x01000193) >>> 0;
+        }
+
+        // Prefixed so it can never be mistaken for, or collide with, a SHA-256 key
+        // written by the same app in a secure context.
+        return `fnv1a${hash.toString(16).padStart(8, "0")}`;
     }
 
     /**
