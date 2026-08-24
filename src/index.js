@@ -1141,6 +1141,14 @@ class AdadaptedJsSdk {
         // Only the session responds to these, not the ad zones - an ad in a visible
         // tab is still in front of the user even when the browser is not the
         // frontmost app.
+        //
+        // WHEN TESTING THIS BY HAND: devtools counts as a separate window, so a page
+        // with devtools focused already reports document.hasFocus() as false. The
+        // session is therefore backgrounded before you start, and because
+        // SESSION_BACKGROUNDED only fires on a transition, switching to another app
+        // from there reports nothing at all - which looks exactly like the feature
+        // being broken. Click on the page itself first, which reports
+        // SESSION_RESUMED, and only then switch away.
         window.addEventListener(
             "blur",
             () => {
