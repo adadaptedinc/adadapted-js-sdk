@@ -2031,6 +2031,22 @@ describe("AdadaptedJsSdk", () => {
             expect(sessionCalls).toHaveLength(0);
         });
 
+        it("reports session events as sdk events, not as user actions", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            const created = getReportedSdkEvents(fetchMock, "SESSION_CREATED");
+
+            expect(created).toHaveLength(1);
+
+            // Reporting tells the SDK's own lifecycle apart from something the
+            // user did by this field, so "app" would file a session start as user
+            // activity. The native SDKs send "sdk" here.
+            expect(created[0].event_source).toBe("sdk");
+        });
+
         it("reports SESSION_CREATED with the new session ID when there is no stored session", async () => {
             const testSdk = sdk!;
 

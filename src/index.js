@@ -2764,10 +2764,12 @@ class AdadaptedJsSdk {
             ],
             requestPayload: this.#buildSdkEventRequest([
                 {
-                    event_source:
-                        this.deviceOs === this.#DeviceOS.DESKTOP
-                            ? this.#ListManagerEventSource.DESKTOP
-                            : this.#ListManagerEventSource.APP,
+                    // "sdk", not "app" or "desktop": every event routed through
+                    // here describes the SDK's own lifecycle, not a user action,
+                    // and reporting keys off this to tell the two apart. The
+                    // native SDKs send "sdk" for these, and the platform is
+                    // already carried by the {os} path segment above.
+                    event_source: this.#ListManagerEventSource.SDK,
                     event_name: eventName,
                     event_timestamp: this.#getCurrentUnixTimestamp(),
                     event_params: eventParams || {},
@@ -3492,6 +3494,11 @@ class AdadaptedJsSdk {
          * The event was triggered from desktop.
          */
         DESKTOP: "desktop",
+        /**
+         * The event describes the SDK's own lifecycle rather than something the
+         * user did. Matches SDK_EVENT_TYPE in the Android SDK's EventStrings.
+         */
+        SDK: "sdk",
     };
 
     /**
