@@ -3184,6 +3184,58 @@ describe("AdadaptedJsSdk", () => {
             }
         });
 
+        it("takes the ad down with the zone on unmount", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            expect(document.querySelector("#zone1 iframe")).not.toBeNull();
+
+            testSdk.unmount();
+
+            // Everything that made this an ad has been torn off it - the impression
+            // is closed, the timer cancelled, the click handler gone with the
+            // listeners - so leaving the creative in the host's layout would show
+            // the user an ad that is no longer measured and can no longer be
+            // clicked.
+            expect(document.getElementById("zone1")!.innerHTML).toBe("");
+            expect(document.getElementById("zone2")!.innerHTML).toBe("");
+        });
+
+        it("finishes unmounting every zone even if clearing one throws", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            // A host that has done something unusual to its own container. Teardown
+            // runs as a loop, so a throw here would strand every zone after this
+            // one - still observed and still reporting - over leftover markup.
+            Object.defineProperty(
+                document.getElementById("zone1")!,
+                "innerHTML",
+                {
+                    configurable: true,
+                    get: () => "",
+                    set: () => {
+                        throw new Error("clear blew up");
+                    },
+                },
+            );
+
+            expect(() => testSdk.unmount()).not.toThrow();
+
+            expect(
+                getReportedAdEvents(fetchMock, "zone_unmounted").map(
+                    (event) => event.zone_id,
+                ),
+            ).toEqual([TEST_ZONE_1_ID, TEST_ZONE_2_ID]);
+            expect(document.getElementById("zone2")!.innerHTML).toBe("");
+        });
+
         it("stamps the session on every ad event, not just the ad request", async () => {
             const testSdk = sdk!;
 

@@ -224,7 +224,7 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
  */
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
-        apiEnv: "dev",
+        apiEnv: "prod",
         apiKey: "E33DDF0X66ABE5EA",
         zonePlacements: [
             {
@@ -239,7 +239,6 @@ export const App: FC = (): ReactElement => {
             },
         ],
     };
-
 
     let keywordSearchTimer: number | undefined;
 
@@ -366,9 +365,7 @@ export const App: FC = (): ReactElement => {
     ): void => {
         // Derived from the input rather than accumulated inside the updater below,
         // which React may run more than once for a single update.
-        const itemNameReportList = itemList
-            .filter((item) => item.aaProduct)
-            .map((item) => item.name);
+        const itemNameReportList = itemList.filter((item) => item.aaProduct).map((item) => item.name);
 
         setUserListItems((prevUserListItems) => {
             const finalListItems = [...prevUserListItems];
@@ -410,9 +407,7 @@ export const App: FC = (): ReactElement => {
             // Acknowledged through the handle from onAddItemsTriggered rather than
             // jsSdk.acknowledgeAdded(), which cannot tell which click it is
             // confirming. Absent when the items did not come from an ad click, and
-            // then there is no interaction to report at all. Calling it when
-            // requiresAcknowledgement is false is harmless - it reports nothing and
-            // returns false - so most apps can call it unconditionally as here.
+            // then there is no interaction to report at all.
             atlContent?.acknowledge();
             jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
         }
@@ -429,9 +424,7 @@ export const App: FC = (): ReactElement => {
         atlContent?: AdadaptedJsSdk.AtlAdContent,
     ): void => {
         // Derived from the input, for the same reason as the list.
-        const itemNameReportList = itemList
-            .filter((item) => item.aaProduct)
-            .map((item) => item.name);
+        const itemNameReportList = itemList.filter((item) => item.aaProduct).map((item) => item.name);
 
         setUserCartItems((prevUserCartItems) => {
             const finalCartItems = [...prevUserCartItems];
@@ -470,9 +463,7 @@ export const App: FC = (): ReactElement => {
             // Acknowledged through the handle from onAddItemsTriggered rather than
             // jsSdk.acknowledgeAdded(), which cannot tell which click it is
             // confirming. Absent when the items did not come from an ad click, and
-            // then there is no interaction to report at all. Calling it when
-            // requiresAcknowledgement is false is harmless - it reports nothing and
-            // returns false - so most apps can call it unconditionally as here.
+            // then there is no interaction to report at all.
             atlContent?.acknowledge();
             jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
         }
@@ -562,9 +553,7 @@ export const App: FC = (): ReactElement => {
                     recipeContextId: "1167",
                     // These have to be zones this app actually renders, or the
                     // context is dropped and every ad request goes out without it.
-                    recipeContextZoneIds: sdkAppDetails.zonePlacements.map(
-                        (placement) => placement.zoneId,
-                    ),
+                    recipeContextZoneIds: sdkAppDetails.zonePlacements.map((placement) => placement.zoneId),
                 },
                 onAddItemsTriggered: (items, adContent) => {
                     setPendingAtlItems(items);

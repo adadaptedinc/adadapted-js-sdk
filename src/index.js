@@ -1752,6 +1752,22 @@ class AdadaptedJsSdk {
         // cached intersection state is cleared by hand.
         zone.isIntersecting = false;
 
+        // The ad comes down with the zone. Everything that made it an ad has just
+        // been torn off it - the impression is closed, the timer is cancelled and
+        // the click handler goes with the element - so leaving the creative in the
+        // host's layout would keep showing the user an ad that is no longer being
+        // measured and can no longer be clicked.
+        if (zone.containerElement) {
+            try {
+                zone.containerElement.innerHTML = "";
+            } catch {
+                // Teardown has to finish. This runs in a loop over every zone and
+                // ahead of the listener and timer cleanup, so letting a failure
+                // here escape would strand the zones after it - still observed,
+                // still reporting - over nothing worse than some leftover markup.
+            }
+        }
+
         this.#reportZoneUnmounted(zone);
     }
 
