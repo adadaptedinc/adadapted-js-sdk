@@ -631,8 +631,8 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Confirms that the items from the most recent unacknowledged "add to list" ad
-     * click reached the user's list, which is what reports that ad's interaction.
+     * Confirms that the items from the oldest unacknowledged "add to list" ad click
+     * reached the user's list, which is what reports that ad's interaction.
      *
      * DEPRECATED: use the handle passed as the second argument to
      * onAddItemsTriggered instead. This method has no way to say which click is
@@ -1428,11 +1428,11 @@ class AdadaptedJsSdk {
 
             this.#flushZoneUnfilled(zone);
 
-            // Resumed before the impression is tracked, because resuming is what
-            // replaces an ad that aged past its refresh time while the zone was
-            // away. Tracking first would open an impression on the outgoing ad and
-            // close it in the same tick, reporting a zero-duration impression for
-            // an ad the user never actually saw.
+            // Resume first, then track. An ad that aged out while the zone was
+            // away is replaced by the refetch resuming starts, but that request is
+            // asynchronous, so the ad on screen is the same one either way and the
+            // impression below belongs to it. It stays open until the replacement
+            // actually arrives, which is the ad the user is looking at until then.
             this.#resumeZoneTimer(zone);
             this.#trackImpression(zone);
         }
@@ -1501,6 +1501,17 @@ class AdadaptedJsSdk {
                     zone.zoneId,
                     this.#ReportedEventType.ZONE_MOUNTED,
                 );
+            }
+
+            // Going away closed the impression on whatever the zone was showing.
+            // That ad cannot simply be counted again - the impression ID belongs to
+            // the ad, so a second pair under the same ID is not a second impression
+            // - and leaving it would put an ad back in front of the user that no
+            // longer counts for anything. The zone takes a fresh ad instead.
+            if (zone.currentAd && zone.impressionEndTracked) {
+                this.#loadNextAd(zone);
+
+                continue;
             }
 
             this.#resumeZoneTimer(zone);
@@ -1714,11 +1725,11 @@ class AdadaptedJsSdk {
             if (this.#zoneIsOnScreen(zone)) {
                 this.#flushZoneUnfilled(zone);
 
-                // Resumed before the impression is tracked, because resuming is what
-                // replaces an ad that aged past its refresh time while the zone was
-                // away. Tracking first would open an impression on the outgoing ad and
-                // close it in the same tick, reporting a zero-duration impression for
-                // an ad the user never actually saw.
+                // Resume first, then track. An ad that aged out while the zone was
+                // away is replaced by the refetch resuming starts, but that request is
+                // asynchronous, so the ad on screen is the same one either way and the
+                // impression below belongs to it. It stays open until the replacement
+                // actually arrives, which is the ad the user is looking at until then.
                 this.#resumeZoneTimer(zone);
                 this.#trackImpression(zone);
             } else {
@@ -1962,22 +1973,31 @@ class AdadaptedJsSdk {
     #handleAdRequestFailed(zone) {
         zone.loaded = true;
 
-        this.#reportZoneUnfilled(zone, this.#ZoneUnfilledReason.REQUEST_FAILED);
-
-        // A zone already showing an ad keeps it. The request that failed was a
-        // refresh, and blanking the zone would take a paying ad off the page over a
-        // transient network error and leave the slot empty for a whole cycle. The
-        // timer is restarted so the zone tries again, carrying the current refresh
-        // time forward so a failing zone still paces its retries rather than
-        // dropping back to the default every time.
-        //
-        // A zone with nothing displayed is the other case and does clear, so its
-        // container does not keep whatever it had before the request.
+        // A zone already showing an ad keeps it. The request that failed was for
+        // the ad's replacement, and blanking the zone would take a paying ad off
+        // the page over a transient network error and leave the slot empty for a
+        // whole cycle.
         if (zone.currentAd) {
-            this.#restartZoneTimer(zone, zone.refreshSeconds);
+            // Not reported as unfilled: the zone is still filled, and still showing
+            // the ad the user can see. Saying otherwise would count a zone that is
+            // working as one with nothing to show.
+            zone.pendingUnfilledReason = undefined;
 
+            // The click guard has to be released even though the ad did not change.
+            // It is normally reset by #displayAd, which does not run on this path,
+            // and until it is the ad on screen silently ignores every further click
+            // - no interaction, no items handed over, and no way for the user to
+            // tell the difference from an ad that does nothing.
+            zone.interactionReported = false;
+
+            // No timer work here: #loadNextAd arms the countdown before the
+            // request goes out, exactly so a failing response cannot leave the zone
+            // without one, so the retry is already scheduled.
             return;
         }
+
+        // Nothing to show, which is what "unfilled" means.
+        this.#reportZoneUnfilled(zone, this.#ZoneUnfilledReason.REQUEST_FAILED);
 
         this.#displayAd(zone, undefined, zone.refreshSeconds);
     }

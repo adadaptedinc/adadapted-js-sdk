@@ -21,10 +21,20 @@ can click one zone's "add to list" ad and then another's before the host has
 finished with the first, so there can be more than one confirmation outstanding.
 
 `acknowledgeAdded()` takes no arguments, so it resolves the **oldest** outstanding
-click. A host that confirms in the order it was called gets the right answer. A host
-that confirms out of order — an async list write that resolves out of order, or a
-confirmation UI the user dismisses out of order — reports each interaction against
-the wrong ad.
+click, and there are two ways that goes wrong.
+
+The first is ordering. A host that confirms in the order it was called gets the right
+answer; a host that confirms out of order — an async list write that resolves out of
+order, or a confirmation UI the user dismisses out of order — reports each
+interaction against the wrong ad.
+
+The second is the ad popover, and it is the stronger reason to migrate. Items added
+from inside a popover also arrive through `onAddItemsTriggered`, but that click's
+interaction was already reported when the popover opened. Calling `acknowledgeAdded()`
+for those items resolves some _unrelated_ outstanding click instead — reporting an
+interaction the user never confirmed, while the popover's own add confirms nothing.
+The handle has neither problem: it is bound to the click it came from, and the one
+handed over for a popover add is inert because that interaction is already counted.
 
 **Use the handle passed to `onAddItemsTriggered` instead.** It is bound to the click
 it came from and cannot be misattributed:
@@ -38,7 +48,9 @@ onAddItemsTriggered: (items, adContent) => {
 ```
 
 `acknowledge()` is safe to call more than once — only the first call reports
-anything — and safe to call late, including after `unmount()`, when it does nothing.
+anything — and safe to call late. A handle is abandoned when the SDK is torn down by
+`unmount()` **or** re-initialized by a second `initialize()`, and acknowledging one
+after that does nothing rather than reporting against whatever replaced it.
 
 The equivalent before, which is what to migrate away from:
 
@@ -52,10 +64,15 @@ onAddItemsTriggered: (items) => {
 
 ## Renamed
 
-| Before                | After                          |
-| --------------------- | ------------------------------ |
-| `onAdsRetrieved(map)` | `onAdRetrieved(zoneId, hasAd)` |
-| `Ad.ad_id`            | `Ad.id`                        |
+| Before                       | After                                   |
+| ---------------------------- | --------------------------------------- |
+| `onAdsRetrieved(map)`        | `onAdRetrieved(zoneId, hasAd)`          |
+| `onAddItemsTriggered(items)` | `onAddItemsTriggered(items, adContent)` |
+| `Ad.ad_id`                   | `Ad.id`                                 |
+
+`onAddItemsTriggered` gains a second argument, the {@link AtlAdContent} handle
+described under Deprecated. Existing handlers keep working — they simply ignore it —
+but confirming through the handle is the only way to get the attribution right.
 
 `onAdRetrieved` reports **one zone at a time**, as each zone's request resolves. The
 old callback handed over a map of every zone at once. That map cannot be produced
@@ -92,8 +109,11 @@ will not be treated as a breaking change.
 
 ## Type changes
 
-These compile against the old types but are now honest about what the service sends,
-so a consumer under `strictNullChecks` will see new errors:
+These are now honest about what the service actually sends. Only the
+`getSessionId()` row can produce a new `strictNullChecks` error in ordinary use:
+after this release no public method or callback hands a consumer an `Ad`, a `Zone`
+or an `AdPayload`, so the other three bite only for code that constructs those
+types by hand.
 
 | Member                          | Change                        |
 | ------------------------------- | ----------------------------- |
@@ -115,7 +135,9 @@ compiling and then behaves differently.
 - **Sessions are generated on the client** and cached in `localStorage` under
   `aa-session-v3-{env}-{hash of api key and advertiser ID}`. The session survives a
   reload, slides forward while the page is the user's focus, and rotates after 30
-  minutes of inactivity. Keys written by older versions are deleted on startup.
+  minutes of inactivity. The two older key shapes are deleted on startup, for the
+  current `apiEnv` only — a stale entry belonging to the other environment is left
+  alone rather than risk clearing a session that is still in use.
 
     The advertiser ID is part of the key because a session is one person's visit to
     one app. Local storage is shared by everyone using the browser profile, so keying
@@ -137,8 +159,11 @@ compiling and then behaves differently.
   refreshes. Visibility is measured against that element's box rather than the
   browser viewport. Leave it unset to measure against the viewport.
 - **Reports that the host does not read are sent with `keepalive`**, so they survive
-  the page closing. A report too large for the browser's 64KB keepalive budget is
-  sent without it rather than being rejected outright.
+  the page closing. The browser gives a document a single 64KB budget for keepalive
+  bodies, shared with the host page's own beacons, and rejects a request outright
+  past it — losing the whole report. The SDK therefore drops `keepalive` from any
+  report whose body exceeds **48KB**, deliberately under that budget. Such a report
+  still sends; it is just no longer guaranteed to survive the page closing.
 - **Action type `"a"` (app store URL) is not handled.** The SDK logs that it cannot
   action the type and leaves the ad in place. This was also true before; it is
   documented here because the type is part of the published `AdActionType` union.

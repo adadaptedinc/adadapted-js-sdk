@@ -2622,6 +2622,444 @@ describe("AdadaptedJsSdk", () => {
             );
         });
 
+        it("hands the popover's own add-to-list an inert handle", async () => {
+            // The bridge only runs when the creative has already put an AdAdapted
+            // object on the iframe, which jsdom cannot do on its own. Stubbing the
+            // contentWindow getter is what makes this path reachable at all.
+            const iframeWindow: any = {
+                AdAdapted: { addItemToList: () => {} },
+            };
+            const contentWindowSpy = jest
+                .spyOn(HTMLIFrameElement.prototype, "contentWindow", "get")
+                .mockReturnValue(iframeWindow);
+
+            try {
+                const handles: any[] = [];
+                const testSdk = sdk!;
+
+                await testSdk.initialize({
+                    ...baseTestProps,
+                    onAddItemsTriggered: (_items, adContent) => {
+                        handles.push(adContent);
+                    },
+                });
+                await setZonesOnScreen(true);
+
+                // Zone 2 carries a popup ad, so this reports the interaction now and
+                // opens the popover.
+                fireEvent.click(
+                    document.querySelector("#zone2 .clickable-area")!,
+                );
+
+                await flushPromises();
+
+                expect(
+                    getReportedAdEvents(fetchMock, "interaction"),
+                ).toHaveLength(1);
+
+                fetchMock.mockClear();
+
+                // The creative adds an item from inside the popover.
+                iframeWindow.AdAdapted.addItemToList(
+                    "PAYLOAD_ID",
+                    "TRACKING_ID",
+                    "Tabasco Original",
+                    "",
+                    "",
+                    "011210000155",
+                    "",
+                    "",
+                    "",
+                );
+
+                expect(handles).toHaveLength(1);
+
+                handles[0].acknowledge();
+
+                await flushPromises();
+
+                // Nothing further: opening the popover was the interaction and it
+                // was counted then. Reporting again would bill the click twice.
+                expect(
+                    getReportedAdEvents(fetchMock, "interaction"),
+                ).toHaveLength(0);
+            } finally {
+                contentWindowSpy.mockRestore();
+            }
+        });
+
+        it("keeps retrying, and stays clickable, after a refresh fails", async () => {
+            jest.useFakeTimers({ doNotFake: ["setImmediate"] });
+
+            try {
+                const handles: any[] = [];
+                const testSdk = sdk!;
+
+                await testSdk.initialize({
+                    ...baseTestProps,
+                    onAddItemsTriggered: (_items, adContent) => {
+                        handles.push(adContent);
+                    },
+                });
+                await setZonesOnScreen(true);
+
+                // The failure has to be in flight before the click, because it is
+                // the click's own rotation that must fail. A click sets the guard
+                // that stops a second click on the same ad, and a rotation that
+                // succeeds clears it again - so a later failure would find the
+                // guard already down and prove nothing.
+                fetchMock = mockFetch({
+                    rejectUrlsContaining: [AD_RETRIEVE_URL],
+                });
+                global.fetch = fetchMock as any;
+
+                fireEvent.click(
+                    document.querySelector("#zone1 .clickable-area")!,
+                );
+
+                await flushPromises();
+
+                expect(handles).toHaveLength(1);
+
+                // Still the same ad, not merely "something in the container".
+                expect(document.querySelector("#zone1 iframe")).not.toBeNull();
+
+                // A zone that keeps its ad has to keep asking, or it freezes on that
+                // ad for the life of the page.
+                fetchMock.mockClear();
+
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+
+                await flushPromises();
+
+                expect(
+                    getAdRequestBodies(fetchMock).filter(
+                        (request) => request.zoneId === TEST_ZONE_1_ID,
+                    ).length,
+                ).toBeGreaterThan(0);
+
+                // And the ad the user can still see has to stay clickable. The guard
+                // that stops a double click is normally released when the next ad
+                // displays, which never happened here.
+                fireEvent.click(
+                    document.querySelector("#zone1 .clickable-area")!,
+                );
+
+                expect(handles).toHaveLength(2);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it("does not report a filled zone as unfilled when its refresh fails", async () => {
+            jest.useFakeTimers({ doNotFake: ["setImmediate"] });
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await setZonesOnScreen(true);
+
+                fetchMock = mockFetch({
+                    rejectUrlsContaining: [AD_RETRIEVE_URL],
+                });
+                global.fetch = fetchMock as any;
+
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+
+                await flushPromises();
+
+                // The zone is still showing an ad. Calling it unfilled would count a
+                // zone that is working as one with nothing to show.
+                expect(
+                    getReportedAdEvents(fetchMock, "zone_unfilled").filter(
+                        (event) => event.zone_id === TEST_ZONE_1_ID,
+                    ),
+                ).toHaveLength(0);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it("takes a fresh ad when a page comes back from the back forward cache", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            const firstImpressions = getReportedAdEvents(
+                fetchMock,
+                "impression",
+            ).length;
+
+            expect(firstImpressions).toBeGreaterThan(0);
+
+            window.dispatchEvent(
+                Object.assign(new Event("pagehide"), { persisted: true }),
+            );
+
+            expect(
+                getReportedAdEvents(fetchMock, "impression_end").length,
+            ).toBeGreaterThan(0);
+
+            fetchMock.mockClear();
+
+            window.dispatchEvent(
+                Object.assign(new Event("pageshow"), { persisted: true }),
+            );
+
+            await flushPromises();
+
+            // Going away closed the impression on the ad that was showing, and it
+            // cannot be counted again under the same impression ID. Leaving it would
+            // put an ad back in front of the user that counts for nothing.
+            expect(getAdRequestBodies(fetchMock).length).toBeGreaterThan(0);
+            expect(
+                getReportedAdEvents(fetchMock, "impression").length,
+            ).toBeGreaterThan(0);
+        });
+
+        it("replaces the session once, even when closing it out reports events", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            const originalSessionId = testSdk.getSessionId();
+
+            // Blurred rather than hidden. Hiding the tab closes every impression on
+            // the way out, so by the time the session rotates there is nothing left
+            // to report and the re-entrant path is never reached. A blurred page is
+            // still visible and still serving, so its impressions are open - and
+            // closing them reports events, and reporting an event asks for the
+            // session ID, which is where a second rotation can start from inside
+            // the first.
+            window.dispatchEvent(new Event("blur"));
+
+            const storageKey = Object.keys(localStorage).find((key) =>
+                key.startsWith("aa-session-v3-"),
+            )!;
+            const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
+            const staleTimestamp = Date.now() - 31 * 60 * 1000;
+
+            localStorage.setItem(
+                storageKey,
+                JSON.stringify({
+                    ...storedSession,
+                    lastActiveAt: staleTimestamp,
+                }),
+            );
+            internals(testSdk).sessionLastActiveAt = staleTimestamp;
+
+            fetchMock.mockClear();
+            testSdk.reportItemsAddedToList(["Milk"], "My List");
+
+            await flushPromises();
+
+            expect(testSdk.getSessionId()).not.toBe(originalSessionId);
+
+            // Exactly one replacement, not one per event reported while closing out
+            // the old session.
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_CREATED"),
+            ).toHaveLength(1);
+
+            // And the impression that belonged to the outgoing session is reported
+            // under it, not under the session that replaced it.
+            const closings = fetchMock.mock.calls
+                .filter(([url]) => (url as string).includes(AD_EVENTS_URL))
+                .map(([, init]) => JSON.parse((init as any).body))
+                .filter((request) =>
+                    request.events.some(
+                        (event: any) => event.event_type === "impression_end",
+                    ),
+                );
+
+            expect(closings.length).toBeGreaterThan(0);
+
+            for (const request of closings) {
+                expect(request.session_id).toBe(originalSessionId);
+            }
+        });
+
+        it("abandons a pending click when the SDK is initialized again", async () => {
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            expect(handles).toHaveLength(1);
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await flushPromises();
+            fetchMock.mockClear();
+
+            // The click belonged to the run that has been replaced.
+            handles[0].acknowledge();
+
+            await flushPromises();
+
+            expect(getReportedAdEvents(fetchMock, "interaction")).toHaveLength(
+                0,
+            );
+        });
+
+        it("reports the deferred acknowledgement with keepalive", async () => {
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            fetchMock.mockClear();
+
+            handles[0].acknowledge();
+
+            await flushPromises();
+
+            const interactionCalls = fetchMock.mock.calls.filter(([, init]) =>
+                JSON.parse((init as any).body)?.events?.some(
+                    (event: any) => event.event_type === "interaction",
+                ),
+            );
+
+            expect(interactionCalls.length).toBeGreaterThan(0);
+
+            for (const [, init] of interactionCalls) {
+                expect((init as any).keepalive).toBe(true);
+            }
+        });
+
+        it("drops the oldest pending click once too many go unacknowledged", async () => {
+            const consoleWarnSpy = jest
+                .spyOn(console, "warn")
+                .mockImplementation(() => {});
+
+            fetchMock = mockFetch({
+                adsByZoneId: {
+                    [TEST_ZONE_1_ID]: testAtlAd,
+                    [TEST_ZONE_2_ID]: {
+                        ...testAtlAd,
+                        id: "SECOND_ATL_AD",
+                        impression_id: "SECOND_ATL_IMPRESSION",
+                    },
+                },
+            });
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await setZonesOnScreen(true);
+
+                // The oldest click is zone 1's, and everything after it is zone 2's,
+                // so the ad named in the warning says which end of the queue was
+                // trimmed.
+                fireEvent.click(
+                    document.querySelector("#zone1 .clickable-area")!,
+                );
+
+                await flushPromises();
+
+                for (let click = 0; click < 25; click++) {
+                    fireEvent.click(
+                        document.querySelector("#zone2 .clickable-area")!,
+                    );
+
+                    await flushPromises();
+                }
+
+                expect(consoleWarnSpy).toHaveBeenCalledWith(
+                    expect.stringContaining(testAtlAd.id),
+                );
+            } finally {
+                consoleWarnSpy.mockRestore();
+            }
+        });
+
+        it("measures a report in bytes, not characters, against the keepalive limit", async () => {
+            const consoleWarnSpy = jest
+                .spyOn(console, "warn")
+                .mockImplementation(() => {});
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            // Comfortably under the limit counted as characters, over it counted as
+            // the UTF-8 bytes the browser actually weighs.
+            const multiByteItems = Array.from(
+                { length: 200 },
+                (_, index) => `${"\u4f60".repeat(60)} ${index}`,
+            );
+
+            testSdk.reportItemsAddedToList(multiByteItems, "");
+
+            await flushPromises();
+
+            const [, init] = fetchMock.mock.calls.find(([url]) =>
+                (url as string).includes(SDK_EVENTS_URL),
+            )!;
+            const body = (init as any).body as string;
+            const keepaliveByteLimit = 48 * 1024;
+
+            // Asserted so the fixture cannot drift into proving nothing: the whole
+            // point is a body that is under the limit counted as characters and over
+            // it counted as bytes.
+            expect(body.length).toBeLessThan(keepaliveByteLimit);
+            expect(new TextEncoder().encode(body).length).toBeGreaterThan(
+                keepaliveByteLimit,
+            );
+
+            expect((init as any).keepalive).toBe(false);
+
+            consoleWarnSpy.mockRestore();
+        });
+
+        it("clears the oldest cached session shape too", async () => {
+            const digest = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(baseTestProps.apiKey),
+            );
+            const appOnlyHash = Array.from(new Uint8Array(digest))
+                .map((byte) => byte.toString(16).padStart(2, "0"))
+                .join("");
+
+            // The very first shape, whose payload carried server issued zones and
+            // ads. It does not parse as a session at all, so it is dead weight in
+            // every user's browser until something removes it.
+            const originalKey = `aa-session-dev-${appOnlyHash}`;
+
+            localStorage.setItem(originalKey, JSON.stringify({ zones: {} }));
+
+            await sdk!.initialize(baseTestProps);
+            await flushPromises();
+
+            expect(localStorage.getItem(originalKey)).toBeNull();
+        });
+
         it("stamps the session on every ad event, not just the ad request", async () => {
             const testSdk = sdk!;
 

@@ -88,10 +88,20 @@ declare class AdadaptedJsSdk {
      *
      * @deprecated Call `acknowledge()` on the {@link AdadaptedJsSdk.AtlAdContent}
      * handed to `onAddItemsTriggered` instead. This method cannot say which click
-     * is being confirmed, so it resolves the oldest one still outstanding. Ads are
-     * now served per zone, so a user can click two "add to list" ads before the
-     * first is confirmed, and confirming them out of order reports each interaction
-     * against the wrong ad.
+     * is being confirmed, so it resolves the oldest one still outstanding, and
+     * there are two ways that goes wrong:
+     *
+     * - Ads are served per zone, so a user can click two "add to list" ads before
+     *   the first is confirmed. Confirming them out of order reports each
+     *   interaction against the wrong ad.
+     * - Items added from inside an ad popover have already had their interaction
+     *   reported, at the moment the popover opened. Calling this method for them
+     *   resolves an unrelated click instead, reporting an interaction the user
+     *   never confirmed while the popover's own add confirms nothing.
+     *
+     * The handle has neither problem: it is bound to the click it came from, and
+     * the one it hands over for a popover add is inert because that interaction
+     * was already counted.
      */
     acknowledgeAdded(): void;
     /**
@@ -407,9 +417,6 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
-     * The definition of a Detailed List Item.
-     */
-    /**
      * One "add to list" ad click, handed to `onAddItemsTriggered` alongside the
      * items so the confirmation can be tied back to the click that produced it.
      *
@@ -438,6 +445,9 @@ declare namespace AdadaptedJsSdk {
         acknowledge(): void;
     }
 
+    /**
+     * The definition of a Detailed List Item.
+     */
     export interface DetailedListItem {
         /**
          * The barcode of the product.
