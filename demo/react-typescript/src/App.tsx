@@ -224,7 +224,7 @@ const TEST_PRODUCTS: AddToListOrCartItem[] = [
  */
 export const App: FC = (): ReactElement => {
     const sdkAppDetails: SdkDetails = {
-        apiEnv: "prod",
+        apiEnv: "dev",
         apiKey: "E33DDF0X66ABE5EA",
         zonePlacements: [
             {
@@ -407,7 +407,9 @@ export const App: FC = (): ReactElement => {
             // Acknowledged through the handle from onAddItemsTriggered rather than
             // jsSdk.acknowledgeAdded(), which cannot tell which click it is
             // confirming. Absent when the items did not come from an ad click, and
-            // then there is no interaction to report at all.
+            // then there is no interaction to report at all. Calling it when
+            // requiresAcknowledgement is false is harmless - it reports nothing and
+            // returns false - so most apps can call it unconditionally as here.
             atlContent?.acknowledge();
             jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
         }
@@ -463,7 +465,9 @@ export const App: FC = (): ReactElement => {
             // Acknowledged through the handle from onAddItemsTriggered rather than
             // jsSdk.acknowledgeAdded(), which cannot tell which click it is
             // confirming. Absent when the items did not come from an ad click, and
-            // then there is no interaction to report at all.
+            // then there is no interaction to report at all. Calling it when
+            // requiresAcknowledgement is false is harmless - it reports nothing and
+            // returns false - so most apps can call it unconditionally as here.
             atlContent?.acknowledge();
             jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
         }
@@ -550,10 +554,23 @@ export const App: FC = (): ReactElement => {
                 //       would leave the other permanently invisible to the SDK.
                 params: {
                     // storeId: "230",
-                    recipeContextId: "1167",
-                    // These have to be zones this app actually renders, or the
-                    // context is dropped and every ad request goes out without it.
-                    recipeContextZoneIds: sdkAppDetails.zonePlacements.map((placement) => placement.zoneId),
+                    // NOTE: Recipe context is left off by default so the demo shows
+                    //       ads out of the box. Setting it is not cosmetic - it
+                    //       narrows every request for the named zones to inventory
+                    //       targeted at that context, and the sandbox currently has
+                    //       none for 1167, so turning it on makes both zones go
+                    //       unfilled. Verified against the service: the same zone
+                    //       returns an ad with no contextId and an empty ad with
+                    //       contextId 1167.
+                    //
+                    //       The zone IDs must be zones this app actually renders.
+                    //       They used to name zones that did not exist here, which
+                    //       silently dropped the context and made the setting look
+                    //       harmless.
+                    // recipeContextId: "1167",
+                    // recipeContextZoneIds: sdkAppDetails.zonePlacements.map(
+                    //     (placement) => placement.zoneId,
+                    // ),
                 },
                 onAddItemsTriggered: (items, adContent) => {
                     setPendingAtlItems(items);
