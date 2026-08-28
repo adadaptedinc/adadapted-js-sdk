@@ -907,15 +907,28 @@ class AdadaptedJsSdk {
      * @returns a Promise of void.
      */
     #startSdk() {
-        return this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
-            this.#hashedApiKey = hashedApiKey;
+        return Promise.all([
+            this.#getHashSHA256(this.apiKey),
+            this.#getHashSHA256(`${this.apiKey}::${this.advertiserId}`),
+        ]).then(([hashedApiKey, hashedSessionOwner]) => {
+            this.#hashedSessionOwner = hashedSessionOwner;
 
-            // Drop any session cached by a previous version of the SDK. That payload
-            // carried server issued zones and ads, and does not parse as the current
-            // session shape.
+            // Drop any session cached by an older version of the SDK. The oldest
+            // payload carried server issued zones and ads and does not parse as the
+            // current shape at all; the one after it parses fine but was keyed on
+            // the app alone, so it belongs to whoever used this browser last rather
+            // than to the user signing in now.
+            //
+            // Only these two exact keys are removed, never a sweep of everything
+            // starting "aa-session-". Another user's current session lives under
+            // this same prefix, and clearing it would recreate on a shared device
+            // the very problem the owner hash is here to fix.
             try {
                 localStorage.removeItem(
                     `aa-session-${this.#apiEnvString}-${hashedApiKey}`,
+                );
+                localStorage.removeItem(
+                    `aa-session-v2-${this.#apiEnvString}-${hashedApiKey}`,
                 );
             } catch {
                 // Local storage being unavailable must not stop the SDK.
@@ -1009,7 +1022,7 @@ class AdadaptedJsSdk {
      * @returns the local storage key for the session.
      */
     #getSessionStorageKey() {
-        return `aa-session-v2-${this.#apiEnvString}-${this.#hashedApiKey}`;
+        return `aa-session-v3-${this.#apiEnvString}-${this.#hashedSessionOwner}`;
     }
 
     /**
@@ -1195,7 +1208,7 @@ class AdadaptedJsSdk {
             return this.sessionId;
         }
 
-        if (!this.#hashedApiKey) {
+        if (!this.#hashedSessionOwner) {
             // Reachable when a client calls a reporting method before initialize()
             // has resolved. Minting a session here would key it on an empty API key
             // and report a session that no configured app owns, so the request is
@@ -3616,11 +3629,23 @@ class AdadaptedJsSdk {
      * its session ID rather than rotating mid-use.
      */
     /**
-     * The SHA-256 of the API key, used to key the stored session so two apps on the
-     * same origin cannot read each other's. Private: it is derived from a client
-     * credential and no consumer has any use for it.
+     * The SHA-256 of the API key and the advertiser ID together, which is what the
+     * stored session is keyed on.
+     *
+     * Both, because a session is one person's visit to one app. The app alone is
+     * not enough: local storage is shared across everyone who uses the browser
+     * profile, so on a shared device the next person to sign in within the session
+     * window would resume the previous person's session and the two of them would
+     * report under one session ID. Hashed rather than stored plainly because the
+     * advertiser ID identifies a user and a storage key is readable by anything on
+     * the origin.
+     *
+     * Deliberately not keyed on storeId or the recipe context. Those are sent with
+     * every ad request rather than carried by the session, and updateStoreId() and
+     * updateRecipeContextId() change them without starting a new session - keying
+     * on them would fragment one visit into a session per store.
      */
-    #hashedApiKey;
+    #hashedSessionOwner;
 
     /**
      * The API environment as the plain string "prod" or "dev", as opposed to

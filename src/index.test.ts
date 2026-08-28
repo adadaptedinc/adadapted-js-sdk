@@ -2300,7 +2300,7 @@ describe("AdadaptedJsSdk", () => {
 
             const originalSessionId = sdk!.getSessionId();
             const storageKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
             const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
 
@@ -2382,7 +2382,7 @@ describe("AdadaptedJsSdk", () => {
             // visible IS activity, so the window must slide and the session survive
             // rather than the visit splitting in two.
             const storageKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
             const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
             const staleTimestamp = Date.now() - 31 * 60 * 1000;
@@ -2421,7 +2421,7 @@ describe("AdadaptedJsSdk", () => {
             // tab genuinely left hidden for half an hour looks like. Ageing only the
             // in-memory copy would be resolved back to the fresh stored session.
             const storageKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
             const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
             const staleTimestamp = Date.now() - 31 * 60 * 1000;
@@ -2452,7 +2452,7 @@ describe("AdadaptedJsSdk", () => {
 
             const firstId = sdk!.getSessionId();
             const firstKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
 
             sdk!.unmount();
@@ -2467,7 +2467,7 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             const secondKey = Object.keys(localStorage).find(
-                (key) => key.startsWith("aa-session-v2-") && key !== firstKey,
+                (key) => key.startsWith("aa-session-v3-") && key !== firstKey,
             );
 
             expect(secondKey).toBeDefined();
@@ -2480,7 +2480,7 @@ describe("AdadaptedJsSdk", () => {
 
             const prodId = sdk!.getSessionId();
             const prodKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
 
             sdk!.unmount();
@@ -2493,13 +2493,133 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             const devKey = Object.keys(localStorage).find(
-                (key) => key.startsWith("aa-session-v2-") && key !== prodKey,
+                (key) => key.startsWith("aa-session-v3-") && key !== prodKey,
             );
 
             expect(devKey).toBeDefined();
             expect(devSdk.getSessionId()).not.toBe(prodId);
 
             devSdk.unmount();
+        });
+
+        it("does not hand one user's session to the next user on the same browser", async () => {
+            await sdk!.initialize({
+                ...baseTestProps,
+                advertiserId: "FIRST_USER_UDID",
+            });
+            await flushPromises();
+
+            const firstUserSessionId = sdk!.getSessionId();
+
+            sdk!.unmount();
+
+            // Same app, same browser profile, well inside the session window - a
+            // shared device, or one person signing out and someone else signing in.
+            // Local storage is shared by everyone who uses the profile, so keying
+            // the session on the app alone would hand this user the last one's
+            // session and report them both under a single ID.
+            const secondUserSdk = createSdk();
+
+            await secondUserSdk.initialize({
+                ...baseTestProps,
+                advertiserId: "SECOND_USER_UDID",
+            });
+            await flushPromises();
+
+            expect(secondUserSdk.getSessionId()).not.toBe(firstUserSessionId);
+            expect(
+                getReportedSdkEvents(fetchMock, "SESSION_CREATED").length,
+            ).toBeGreaterThan(0);
+
+            secondUserSdk.unmount();
+        });
+
+        it("gives a returning user their own session back", async () => {
+            await sdk!.initialize({
+                ...baseTestProps,
+                advertiserId: "FIRST_USER_UDID",
+            });
+            await flushPromises();
+
+            const firstUserSessionId = sdk!.getSessionId();
+
+            sdk!.unmount();
+
+            // The other half of the same rule: scoping to the user must not cost a
+            // returning user their own session.
+            const returningSdk = createSdk();
+
+            await returningSdk.initialize({
+                ...baseTestProps,
+                advertiserId: "FIRST_USER_UDID",
+            });
+            await flushPromises();
+
+            expect(returningSdk.getSessionId()).toBe(firstUserSessionId);
+
+            returningSdk.unmount();
+        });
+
+        it("keeps the session when only the store changes", async () => {
+            await sdk!.initialize({
+                ...baseTestProps,
+                params: { storeId: "STORE_A" },
+            });
+            await flushPromises();
+
+            const originalSessionId = sdk!.getSessionId();
+
+            sdk!.unmount();
+
+            // Store and recipe context ride on each ad request rather than on the
+            // session, and updateStoreId() changes them without starting a new one.
+            // Keying the session on them would split one shopper browsing two
+            // stores into two sessions.
+            const otherStoreSdk = createSdk();
+
+            await otherStoreSdk.initialize({
+                ...baseTestProps,
+                params: { storeId: "STORE_B" },
+            });
+            await flushPromises();
+
+            expect(otherStoreSdk.getSessionId()).toBe(originalSessionId);
+
+            otherStoreSdk.unmount();
+        });
+
+        it("clears a session left behind by a version that keyed on the app alone", async () => {
+            // The old key hashed the API key by itself; the current one hashes the
+            // API key and the advertiser ID together, so it has to be built the
+            // same way the SDK builds it rather than derived from the new key.
+            const digest = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(baseTestProps.apiKey),
+            );
+            const appOnlyKey = `aa-session-v2-dev-${Array.from(
+                new Uint8Array(digest),
+            )
+                .map((byte) => byte.toString(16).padStart(2, "0"))
+                .join("")}`;
+
+            // Written by the previous version under the app-only key, so it belongs
+            // to whoever used this browser last. It must not survive to be resumed.
+            localStorage.setItem(
+                appOnlyKey,
+                JSON.stringify({
+                    sessionId: "JSSTALESESSIONFROMTHELASTUSERAAAA",
+                    createdAt: Date.now(),
+                    lastActiveAt: Date.now(),
+                }),
+            );
+
+            await sdk!.initialize(baseTestProps);
+            await flushPromises();
+
+            expect(localStorage.getItem(appOnlyKey)).toBeNull();
+            expect(sdk!.getSessionId()).not.toBe(
+                "JSSTALESESSIONFROMTHELASTUSERAAAA",
+            );
         });
 
         it("stamps the session on every ad event, not just the ad request", async () => {
@@ -2741,7 +2861,7 @@ describe("AdadaptedJsSdk", () => {
             window.dispatchEvent(new Event("blur"));
 
             const storageKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
             const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
             const staleTimestamp = Date.now() - 31 * 60 * 1000;
@@ -2785,7 +2905,7 @@ describe("AdadaptedJsSdk", () => {
             window.dispatchEvent(new Event("blur"));
 
             const storageKey = Object.keys(localStorage).find((key) =>
-                key.startsWith("aa-session-v2-"),
+                key.startsWith("aa-session-v3-"),
             )!;
             const storedSession = JSON.parse(localStorage.getItem(storageKey)!);
             const staleTimestamp = Date.now() - 31 * 60 * 1000;
@@ -3402,7 +3522,7 @@ describe("AdadaptedJsSdk", () => {
                 await flushPromises();
 
                 const fallbackKey = Object.keys(localStorage).find((key) =>
-                    key.startsWith("aa-session-v2-"),
+                    key.startsWith("aa-session-v3-"),
                 )!;
 
                 expect(fallbackKey).toContain("fnv1a");
@@ -3420,7 +3540,7 @@ describe("AdadaptedJsSdk", () => {
                 await flushPromises();
 
                 const otherKey = Object.keys(localStorage).find((key) =>
-                    key.startsWith("aa-session-v2-"),
+                    key.startsWith("aa-session-v3-"),
                 )!;
 
                 expect(otherKey).not.toBe(fallbackKey);

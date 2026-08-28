@@ -113,9 +113,23 @@ compiling and then behaves differently.
 - **One ad per zone per request.** Each zone requests its own ad and refreshes on its
   own `refresh_time`. There is no client side cycling through a list of ads.
 - **Sessions are generated on the client** and cached in `localStorage` under
-  `aa-session-v2-{env}-{hash of api key}`. The session survives a reload, slides
-  forward while the page is the user's focus, and rotates after 30 minutes of
-  inactivity. The old key is deleted on startup.
+  `aa-session-v3-{env}-{hash of api key and advertiser ID}`. The session survives a
+  reload, slides forward while the page is the user's focus, and rotates after 30
+  minutes of inactivity. Keys written by older versions are deleted on startup.
+
+    The advertiser ID is part of the key because a session is one person's visit to
+    one app. Local storage is shared by everyone using the browser profile, so keying
+    on the app alone meant that on a shared device the next person to sign in within
+    the session window resumed the previous person's session, and the two of them
+    reported under a single session ID. Signing back in as the same user still
+    resumes that user's own session.
+
+    The key deliberately does **not** include `storeId` or the recipe context. Those
+    travel with each ad request rather than with the session, and `updateStoreId()`
+    and `updateRecipeContextId()` change them without starting a new session — so
+    keying on them would split one shopper browsing several stores into several
+    sessions.
+
 - **`onAdZonesRefreshed` fires per zone, per rotation**, not once per bulk refresh.
 - **`scrollContainerId` is now the `IntersectionObserver` root**, not a scroll
   listener target. It must be an **ancestor of every placement element** — a zone
