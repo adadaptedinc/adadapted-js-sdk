@@ -942,6 +942,8 @@ class AdadaptedJsSdk {
                 // Local storage being unavailable must not stop the SDK.
             }
 
+            this.#clearExpiredSessions();
+
             // Seeded from the page's actual state, so a page that starts out
             // unfocused does not immediately report a transition it never made.
             this.sessionIsBackgrounded = this.#isPageBackgrounded();
@@ -1067,6 +1069,65 @@ class AdadaptedJsSdk {
         }
 
         return `${this.#SESSION_ID_PREFIX}${sessionId}`;
+    }
+
+    /**
+     * Removes stored sessions that have already aged out.
+     *
+     * The stored session is keyed partly on the advertiser ID, so a host that mints
+     * a new one per visit - anonymous users, or an ID rotated on every load - leaves
+     * a fresh entry behind each time and nothing would ever collect them. Local
+     * storage then fills up, and because persisting a session is deliberately
+     * allowed to fail quietly, the first thing the host notices is its own storage
+     * failing rather than anything from the SDK.
+     *
+     * Only entries past the session window are touched, which is what makes this
+     * safe where a blanket sweep of the prefix is not: an entry that old is already
+     * dead, because resolving it would mint a new session anyway. Another user's
+     * live session on a shared device is left exactly where it is.
+     */
+    #clearExpiredSessions() {
+        try {
+            const expiredKeys = [];
+
+            for (let index = 0; index < localStorage.length; index++) {
+                const key = localStorage.key(index);
+
+                if (!key || !key.startsWith("aa-session-v3-")) {
+                    continue;
+                }
+
+                let storedSession;
+
+                try {
+                    storedSession = JSON.parse(localStorage.getItem(key));
+                } catch {
+                    // Unparseable, so it cannot be resumed by anyone. Dropping it is
+                    // the same outcome as leaving it, minus the space.
+                    expiredKeys.push(key);
+
+                    continue;
+                }
+
+                const lastActiveAt =
+                    storedSession &&
+                    typeof storedSession.lastActiveAt === "number"
+                        ? storedSession.lastActiveAt
+                        : 0;
+
+                if (Date.now() - lastActiveAt >= this.#SESSION_LIFETIME_MS) {
+                    expiredKeys.push(key);
+                }
+            }
+
+            // Collected first and removed after, because removing while walking the
+            // index shifts everything after it and would skip entries.
+            for (const key of expiredKeys) {
+                localStorage.removeItem(key);
+            }
+        } catch {
+            // Local storage being unavailable must not stop the SDK.
+        }
     }
 
     /**
@@ -1309,21 +1370,30 @@ class AdadaptedJsSdk {
         // from there reports nothing at all - which looks exactly like the feature
         // being broken. Click on the page itself first, which reports
         // SESSION_RESUMED, and only then switch away.
-        window.addEventListener(
-            "blur",
-            () => {
-                this.#updateSessionActivity(true);
-            },
-            listenerOptions,
-        );
+        // Not registered inside an iframe. There these fire when focus moves
+        // between the frame and the rest of the host page - the user clicking from
+        // the ad into the page's own search box - which says nothing about whether
+        // the browser is still the user's focus. Acting on them would report a
+        // session backgrounded and resumed as the user moved around a page they
+        // never left. An embedded SDK tracks the session by visibility alone, which
+        // still fires for an iframe when the tab itself is hidden.
+        if (this.#isTopLevelDocument()) {
+            window.addEventListener(
+                "blur",
+                () => {
+                    this.#updateSessionActivity(true);
+                },
+                listenerOptions,
+            );
 
-        window.addEventListener(
-            "focus",
-            () => {
-                this.#updateSessionActivity(false);
-            },
-            listenerOptions,
-        );
+            window.addEventListener(
+                "focus",
+                () => {
+                    this.#updateSessionActivity(false);
+                },
+                listenerOptions,
+            );
+        }
 
         // A page that fires "pagehide" is not always going away. iOS Safari fires it
         // on pages it later brings back, and every zone was reported unmounted on
@@ -1349,6 +1419,28 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Whether this document is the top level page rather than an iframe.
+     *
+     * Focus only says anything about the user's attention in a top level document.
+     * Inside an iframe both halves of the signal are wrong: document.hasFocus() is
+     * false until the user clicks into the frame, so an ad visible on a page the
+     * user is reading looks backgrounded, and the blur and focus events fire when
+     * focus moves between the frame and the rest of the host page, which has
+     * nothing to do with the browser losing focus to another application.
+     * @returns true if the SDK is running in the top level document.
+     */
+    #isTopLevelDocument() {
+        try {
+            return window.top === window;
+        } catch {
+            // Comparing references does not touch a cross origin property, but a
+            // hardened embedder can still make the access itself throw. Treated as
+            // an iframe, which is the conservative answer.
+            return false;
+        }
+    }
+
+    /**
      * Determines whether the page has stopped being the user's current focus. That
      * happens two ways: the tab stops being the shown tab, or the browser itself
      * stops being the focused application while this tab is the one on screen.
@@ -1360,10 +1452,11 @@ class AdadaptedJsSdk {
         }
 
         // hasFocus is what catches the browser losing focus to another app, which
-        // never raises visibilitychange. Treated as focused when unavailable, so a
-        // host without it behaves as it did before rather than reporting the session
-        // as permanently backgrounded.
-        return typeof document.hasFocus === "function"
+        // never raises visibilitychange. Treated as focused when unavailable, and
+        // in an iframe, so those hosts behave as they did before rather than
+        // reporting the session as permanently backgrounded.
+        return this.#isTopLevelDocument() &&
+            typeof document.hasFocus === "function"
             ? !document.hasFocus()
             : false;
     }

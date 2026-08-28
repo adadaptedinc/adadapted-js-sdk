@@ -151,6 +151,13 @@ compiling and then behaves differently.
     reported under a single session ID. Signing back in as the same user still
     resumes that user's own session.
 
+    `advertiserId` is expected to be **stable for a given user**. A host that mints a
+    new one per page load is opting out of session continuity entirely — every visit
+    becomes its own session, which is the correct outcome for a genuinely new user
+    each time, but is worth knowing if the ID is being rotated by accident. Stored
+    sessions past the 30 minute window are cleared on startup, so a rotating ID does
+    not slowly fill the browser's storage.
+
     The key deliberately does **not** include `storeId` or the recipe context. Those
     travel with each ad request rather than with the session, and `updateStoreId()`
     and `updateRecipeContextId()` change them without starting a new session — so
@@ -171,6 +178,13 @@ compiling and then behaves differently.
   past it — losing the whole report. The SDK therefore drops `keepalive` from any
   report whose body exceeds **48KB**, deliberately under that budget. Such a report
   still sends; it is just no longer guaranteed to survive the page closing.
+- **Inside an iframe the session is tracked by page visibility alone.** In a top
+  level page the SDK also watches focus, so switching to another application
+  reports the session backgrounded even though the tab is still visible. That
+  signal is meaningless in an iframe — `document.hasFocus()` is false until the
+  user clicks into the frame, and the focus events fire when focus moves between
+  the frame and the rest of the host page — so an embedded SDK ignores it. An
+  embedded session is still reported as backgrounded when the tab itself is hidden.
 - **Action type `"a"` (app store URL) is not handled.** The SDK logs that it cannot
   action the type and leaves the ad in place. This was also true before; it is
   documented here because the type is part of the published `AdActionType` union.

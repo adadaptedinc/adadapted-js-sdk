@@ -3111,6 +3111,79 @@ describe("AdadaptedJsSdk", () => {
             expect(localStorage.getItem(originalKey)).toBeNull();
         });
 
+        it("collects sessions that have aged out, and leaves live ones alone", async () => {
+            const staleKey = `aa-session-v3-dev-${"a".repeat(64)}`;
+            const liveKey = `aa-session-v3-dev-${"b".repeat(64)}`;
+
+            // A visit from a host that mints a new advertiser ID each time. Nothing
+            // would ever collect these otherwise, and local storage filling up
+            // surfaces as the host's own storage failing, not as an SDK error.
+            localStorage.setItem(
+                staleKey,
+                JSON.stringify({
+                    sessionId: "JSSTALEAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    createdAt: Date.now() - 60 * 60 * 1000,
+                    lastActiveAt: Date.now() - 31 * 60 * 1000,
+                }),
+            );
+
+            // Another user of this browser, still inside the session window. This is
+            // what makes the sweep safe where clearing the whole prefix would not.
+            localStorage.setItem(
+                liveKey,
+                JSON.stringify({
+                    sessionId: "JSLIVEBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+                    createdAt: Date.now(),
+                    lastActiveAt: Date.now(),
+                }),
+            );
+
+            await sdk!.initialize(baseTestProps);
+            await flushPromises();
+
+            expect(localStorage.getItem(staleKey)).toBeNull();
+            expect(localStorage.getItem(liveKey)).not.toBeNull();
+        });
+
+        it("leaves entries that are not the SDK's own alone", async () => {
+            localStorage.setItem("some-host-app-key", "host data");
+
+            await sdk!.initialize(baseTestProps);
+            await flushPromises();
+
+            expect(localStorage.getItem("some-host-app-key")).toBe("host data");
+        });
+
+        // NOTE: The iframe half of this cannot be tested here. window.top is a
+        //       non-configurable own property in jsdom, so there is no way to make
+        //       the SDK believe it is embedded. What is pinned below is that the
+        //       top level behaviour still works - that the iframe guard has not
+        //       simply switched focus tracking off everywhere.
+        it("still tracks focus when it is the top level page", async () => {
+            const hasFocusSpy = jest
+                .spyOn(document, "hasFocus")
+                .mockReturnValue(true);
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await setZonesOnScreen(true);
+
+                fetchMock.mockClear();
+
+                window.dispatchEvent(new Event("blur"));
+
+                await flushPromises();
+
+                expect(
+                    getReportedSdkEvents(fetchMock, "SESSION_BACKGROUNDED"),
+                ).toHaveLength(1);
+            } finally {
+                hasFocusSpy.mockRestore();
+            }
+        });
+
         it("stamps the session on every ad event, not just the ad request", async () => {
             const testSdk = sdk!;
 
