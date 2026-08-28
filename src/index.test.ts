@@ -2367,6 +2367,227 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(false);
         });
 
+        it("sends SESSION_BACKGROUNDED with keepalive", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            fetchMock.mockClear();
+
+            // Backgrounding the page is what a tab close looks like first, so this
+            // is the last chance to report it. Without keepalive the request is
+            // cancelled with the document, exactly as the impression close beside
+            // it would be.
+            Object.defineProperty(document, "visibilityState", {
+                value: "hidden",
+                configurable: true,
+            });
+            document.dispatchEvent(new Event("visibilitychange"));
+
+            await flushPromises();
+
+            const backgrounded = fetchMock.mock.calls.find(([, init]) => {
+                const body = (init as { body?: string })?.body;
+
+                return (
+                    typeof body === "string" &&
+                    body.includes("SESSION_BACKGROUNDED")
+                );
+            });
+
+            expect(backgrounded).toBeDefined();
+            expect(
+                (backgrounded![1] as { keepalive?: boolean }).keepalive,
+            ).toBe(true);
+        });
+
+        it("survives a payload pickup that answers with no JSON body", async () => {
+            const onPayloadsAvailable = jest.fn();
+
+            // A 200 with an unparseable body. The parse no longer rejects, so this
+            // resolves to null and lands straight in the success handler, where
+            // reading a property off it threw a TypeError out of the callback.
+            fetchMock = jest.fn((url: string) => {
+                if (url.includes("/v/1/pickup")) {
+                    return Promise.resolve({
+                        ok: true,
+                        status: 200,
+                        json: () => Promise.reject(new Error("not json")),
+                    });
+                }
+
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({}),
+                });
+            });
+            // @ts-ignore
+            global.fetch = fetchMock;
+
+            const consoleError = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => undefined);
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize({
+                    ...baseTestProps,
+                    onPayloadsAvailable,
+                });
+
+                await flushPromises();
+
+                // A throw here is swallowed and logged by the request layer, so the
+                // symptom of the bug is the handler dying silently: the callback
+                // never runs and an error is logged instead.
+                expect(
+                    consoleError.mock.calls.filter(([message]) =>
+                        String(message).includes(
+                            "error occurred handling the response",
+                        ),
+                    ),
+                ).toHaveLength(0);
+                expect(onPayloadsAvailable).toHaveBeenCalledTimes(1);
+                expect(onPayloadsAvailable).toHaveBeenCalledWith([]);
+            } finally {
+                consoleError.mockRestore();
+            }
+        });
+
+        it("keeps the rest of a pickup batch when one payload has no items", async () => {
+            const onPayloadsAvailable = jest.fn();
+
+            fetchMock = mockFetch({
+                payloads: [
+                    { payload_id: "payload-broken" },
+                    {
+                        payload_id: "payload-good",
+                        detailed_list_items: [
+                            {
+                                product_title: "Milk",
+                                product_brand: "",
+                                product_category: "",
+                                product_barcode: "",
+                                product_discount: "",
+                                product_image: "",
+                                product_sku: "",
+                            },
+                        ],
+                    },
+                ],
+            });
+
+            const testSdk = sdk!;
+
+            await testSdk.initialize({ ...baseTestProps, onPayloadsAvailable });
+            await flushPromises();
+
+            // One malformed entry used to throw out of the loop, discarding the
+            // whole batch and the callback with it.
+            expect(onPayloadsAvailable).toHaveBeenCalledTimes(1);
+
+            const delivered = onPayloadsAvailable.mock.calls[0][0] as {
+                payload_id: string;
+            }[];
+
+            expect(delivered.map((entry) => entry.payload_id)).toContain(
+                "payload-good",
+            );
+        });
+
+        it("does not burn an ad request for a zone covered by the popover", async () => {
+            jest.useFakeTimers({ doNotFake: ["setImmediate"] });
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await setZonesOnScreen(true);
+
+                document
+                    .querySelector<HTMLElement>("#zone2 .clickable-area")!
+                    .click();
+
+                fetchMock.mockClear();
+
+                // Well past zone1's refresh interval, entirely behind the overlay.
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 3000);
+
+                await flushPromises();
+
+                // The visibility guard stops the impression being counted but not
+                // the request going out: an elapsed countdown still reached
+                // loadNextAd and fetched an ad rendered where nobody could see it.
+                // A paused countdown never elapses, so nothing is spent.
+                expect(
+                    getAdRequestBodies(fetchMock).filter(
+                        (body) => body.zoneId === TEST_ZONE_1_ID,
+                    ),
+                ).toHaveLength(0);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it("wakes every zone when the popover closes, not just the clicked one", async () => {
+            jest.useFakeTimers({ doNotFake: ["setImmediate"] });
+
+            try {
+                const testSdk = sdk!;
+
+                await testSdk.initialize(baseTestProps);
+                await setZonesOnScreen(true);
+
+                // Open the popover from zone2. zone1 is on screen behind it.
+                document
+                    .querySelector<HTMLElement>("#zone2 .clickable-area")!
+                    .click();
+
+                expect(document.getElementsByClassName("AdPopup")).toHaveLength(
+                    1,
+                );
+
+                // zone1's countdown elapses while it is covered. Its callback
+                // clears timerRunning and reaches loadNextAd, which cannot re-arm
+                // because the popover guard blocks it.
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+
+                await flushPromises();
+
+                expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(false);
+
+                fetchMock.mockClear();
+
+                // Closing the popover must bring zone1 back. Before this, only the
+                // clicked zone was revived and zone1 stayed frozen for the life of
+                // the page: no timer, no impression, and an ad already burned
+                // behind the overlay.
+                document
+                    .querySelector<HTMLElement>(".AdPopup .button-label")!
+                    .click();
+
+                await flushPromises();
+
+                expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(true);
+
+                // And it goes on rotating under its own steam.
+                jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
+
+                await flushPromises();
+
+                expect(
+                    getAdRequestBodies(fetchMock).filter(
+                        (body) => body.zoneId === TEST_ZONE_1_ID,
+                    ).length,
+                ).toBeGreaterThan(0);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
         it("pairs impression and impression_end across several rotations", async () => {
             jest.useFakeTimers({ doNotFake: ["setImmediate"] });
 

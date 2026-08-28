@@ -1234,9 +1234,17 @@ class AdadaptedJsSdk {
     #onSessionBackgrounded() {
         this.#touchSession(true);
 
-        this.#trackSdkEvent(this.#SdkEventName.SESSION_BACKGROUNDED, {
-            sessionId: this.sessionId,
-        });
+        // Sent with keepalive for the same reason the impression close in
+        // #onPageHidden is: closing a tab backgrounds the page first, so this is
+        // the last chance to report it and a plain request is cancelled when the
+        // document goes away.
+        this.#trackSdkEvent(
+            this.#SdkEventName.SESSION_BACKGROUNDED,
+            {
+                sessionId: this.sessionId,
+            },
+            true,
+        );
     }
 
     /**
@@ -1985,6 +1993,37 @@ class AdadaptedJsSdk {
     }
 
     /**
+     * Pauses every mounted zone's countdown.
+     *
+     * Used when the ad popover opens, which covers the whole viewport.
+     */
+    #pauseAllZoneTimers() {
+        for (const zoneId of Object.keys(this.zones)) {
+            this.#pauseZoneTimer(this.zones[zoneId]);
+        }
+    }
+
+    /**
+     * Resumes every mounted zone's countdown, optionally leaving one alone.
+     *
+     * Used when the ad popover closes. The zone whose ad opened the popover is
+     * skipped, because the caller rotates it explicitly instead: it held its ad
+     * while the user was engaged with it and is owed a fresh one.
+     * @param {object} [skipZone] - A zone to leave for the caller to handle.
+     */
+    #resumeAllZoneTimers(skipZone) {
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            if (skipZone && zone === skipZone) {
+                continue;
+            }
+
+            this.#resumeZoneTimer(zone);
+        }
+    }
+
+    /**
      * Freezes what is left of a zone's countdown, so a zone that is off screen or
      * sitting in a hidden tab neither refreshes nor fetches.
      * @param {object} zone - The zone state.
@@ -2383,6 +2422,10 @@ class AdadaptedJsSdk {
 
             document.body.style.overflow = this.initialBodyOverflowStyle;
 
+            // Resumed after the container is removed, so #zoneIsOnScreen sees an
+            // uncovered viewport. The clicked zone is handled separately below.
+            this.#resumeAllZoneTimers(zone);
+
             // The ad was held while the user was engaged with it, so it rotates now
             // rather than being replaced underneath the popover.
             if (zone) {
@@ -2450,6 +2493,17 @@ class AdadaptedJsSdk {
 
             document.body.append(this.#generateAdPopover(currentAd, zone));
             document.body.style.overflow = "hidden";
+
+            // Every zone is now covered, so every countdown stops here and is
+            // resumed when the overlay comes down. #zoneIsOnScreen already refuses
+            // to arm a timer behind the popover, but a countdown that was already
+            // running was never stopped: it elapsed, cleared timerRunning, and ran
+            // #loadNextAd, which cannot re-arm and so left the zone with no timer
+            // at all. That zone then stayed frozen for the life of the page, its
+            // impression uncounted, having already burned a request for an ad
+            // rendered behind the overlay. Pausing also stops that request, since
+            // a paused countdown never elapses.
+            this.#pauseAllZoneTimers();
 
             const adPopoverIFrameRef = document.getElementById("AdPopupIframe");
 
@@ -2871,7 +2925,12 @@ class AdadaptedJsSdk {
                 onSuccess: (response) => {
                     const finalItemList = [];
 
-                    if (response.payloads) {
+                    // response, not just response.payloads: an empty or non-JSON
+                    // 200 resolves to null now that the body parse no longer
+                    // rejects, and reading a property off it throws out of the
+                    // handler. The intercept and ad handlers were both updated for
+                    // that; this one was missed.
+                    if (response && response.payloads) {
                         for (const payload of response.payloads) {
                             if (
                                 finalItemList.find(
@@ -2892,7 +2951,16 @@ class AdadaptedJsSdk {
                                 // The payload ID was not found in finalItemList, so add it.
                                 const detailedItemList = [];
 
-                                for (const itemData of payload.detailed_list_items) {
+                                // Hoisted rather than inlined: a payload arriving
+                                // without this field would otherwise throw out of
+                                // the whole handler, discarding the payloads
+                                // already collected in the same batch along with
+                                // the callback. The type declares it required, so
+                                // this is cheap insurance rather than a known bug.
+                                const listItems =
+                                    payload.detailed_list_items || [];
+
+                                for (const itemData of listItems) {
                                     detailedItemList.push({
                                         product_title:
                                             itemData["product_title"],
