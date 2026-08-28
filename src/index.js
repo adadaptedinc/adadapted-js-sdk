@@ -17,12 +17,10 @@ class AdadaptedJsSdk {
         this.enableKeywordIntercept = false;
         this.zonePlacements = undefined;
         this.apiEnv = this.#ApiEnv.Prod;
-        this.apiEnvString = "prod";
         this.listManagerApiEnv = this.#ListManagerApiEnv.Prod;
         this.payloadApiEnv = this.#PayloadApiEnv.Prod;
         this.deviceOs = undefined;
         this.sessionId = undefined;
-        this.sessionCreatedAt = undefined;
         this.sessionLastActiveAt = undefined;
         this.sessionPersistedAt = undefined;
         this.sessionIsBackgrounded = false;
@@ -42,15 +40,8 @@ class AdadaptedJsSdk {
          */
         this.zones = {};
 
-        /**
-         * Running map of {zone ID -> ad was available}. Rebuilt as each zone
-         * resolves, and handed to onAdsRetrieved every time it changes.
-         */
-        this.adZoneAdAvailabilityMap = {};
-
         this.intersectionObserver = undefined;
         this.documentEventAbortController = undefined;
-        this.hashedApiKey = undefined;
 
         /**
          * Triggered when the ad zone has refreshed.
@@ -79,7 +70,7 @@ class AdadaptedJsSdk {
         /**
          * Triggered when ads have been retrieved.
          */
-        this.onAdsRetrieved = () => {
+        this.onAdRetrieved = () => {
             // Defaulting to empty method.
         };
     }
@@ -175,7 +166,7 @@ class AdadaptedJsSdk {
                 // If the apiEnv value is not provided, production will be used as default.
                 // NOTE: This must normalize to a real value rather than pass props.apiEnv
                 //       through, because it is part of the session storage key.
-                this.apiEnvString = props.apiEnv === "dev" ? "dev" : "prod";
+                this.#apiEnvString = props.apiEnv === "dev" ? "dev" : "prod";
 
                 this.deviceLocale = props.deviceLocale;
 
@@ -214,10 +205,10 @@ class AdadaptedJsSdk {
                     this.onPayloadsAvailable = props.onPayloadsAvailable;
                 }
 
-                // If the callback for onAdsRetrieved was provided, set it
+                // If the callback for onAdRetrieved was provided, set it
                 // globally for use when the method needs to be triggered.
-                if (props.onAdsRetrieved) {
-                    this.onAdsRetrieved = props.onAdsRetrieved;
+                if (props.onAdRetrieved) {
+                    this.onAdRetrieved = props.onAdRetrieved;
                 }
 
                 this.deviceOs = this.#getOperatingSystem();
@@ -557,9 +548,15 @@ class AdadaptedJsSdk {
      */
     acknowledgeAdded() {
         if (this.lastSelectedATL !== undefined) {
+            // Sent with keepalive for the same reason the click itself is: this is
+            // the deferred half of that click, reported once the host confirms the
+            // items reached the list, and the host may well navigate on the back of
+            // the same user action.
             this.#triggerReportAdEvent(
                 this.lastSelectedATL,
                 this.#ReportedEventType.INTERACTION,
+                undefined,
+                true,
             );
 
             this.lastSelectedATL = undefined;
@@ -787,7 +784,6 @@ class AdadaptedJsSdk {
         }
 
         this.zones = {};
-        this.adZoneAdAvailabilityMap = {};
 
         // An open popover outlives the SDK otherwise, leaving the host page under a
         // full screen overlay it cannot dismiss and with body scrolling disabled.
@@ -821,14 +817,14 @@ class AdadaptedJsSdk {
      */
     #startSdk() {
         return this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
-            this.hashedApiKey = hashedApiKey;
+            this.#hashedApiKey = hashedApiKey;
 
             // Drop any session cached by a previous version of the SDK. That payload
             // carried server issued zones and ads, and does not parse as the current
             // session shape.
             try {
                 localStorage.removeItem(
-                    `aa-session-${this.apiEnvString}-${hashedApiKey}`,
+                    `aa-session-${this.#apiEnvString}-${hashedApiKey}`,
                 );
             } catch {
                 // Local storage being unavailable must not stop the SDK.
@@ -922,7 +918,7 @@ class AdadaptedJsSdk {
      * @returns the local storage key for the session.
      */
     #getSessionStorageKey() {
-        return `aa-session-v2-${this.apiEnvString}-${this.hashedApiKey}`;
+        return `aa-session-v2-${this.#apiEnvString}-${this.#hashedApiKey}`;
     }
 
     /**
@@ -1004,7 +1000,7 @@ class AdadaptedJsSdk {
                 this.#getSessionStorageKey(),
                 JSON.stringify({
                     sessionId: this.sessionId,
-                    createdAt: this.sessionCreatedAt,
+                    createdAt: this.#sessionCreatedAt,
                     lastActiveAt: this.sessionLastActiveAt,
                 }),
             );
@@ -1061,12 +1057,23 @@ class AdadaptedJsSdk {
             currentTime - persistedSession.lastActiveAt >=
                 this.#SESSION_LIFETIME_MS;
 
+        // An impression left open when the ID changes would report its
+        // impression_end under the new session, leaving the old session an
+        // impression with no end and the new one an end with no impression. The
+        // impression_id is assigned by the API per ad, so the pair cannot simply be
+        // reopened under the new session either - that would report the same
+        // impression_id twice. Closing it here keeps each pair whole and inside one
+        // session; the zone's next ad impresses under the new one.
+        if (isNewSession && this.sessionId) {
+            this.#closeOpenImpressions();
+        }
+
         if (isNewSession) {
             this.sessionId = this.#generateSessionId();
-            this.sessionCreatedAt = currentTime;
+            this.#sessionCreatedAt = currentTime;
         } else {
             this.sessionId = persistedSession.sessionId;
-            this.sessionCreatedAt = persistedSession.createdAt;
+            this.#sessionCreatedAt = persistedSession.createdAt;
         }
 
         this.sessionLastActiveAt = currentTime;
@@ -1091,7 +1098,13 @@ class AdadaptedJsSdk {
      * @returns the current session ID.
      */
     #ensureSession() {
-        if (!this.hashedApiKey) {
+        if (this.#sessionRotating) {
+            // Mid-rotation, so the events being reported are the ones closing out
+            // the outgoing session and they belong to the ID that is still current.
+            return this.sessionId;
+        }
+
+        if (!this.#hashedApiKey) {
             // Reachable when a client calls a reporting method before initialize()
             // has resolved. Minting a session here would key it on an empty API key
             // and report a session that no configured app owns, so the request is
@@ -1105,19 +1118,29 @@ class AdadaptedJsSdk {
             return this.sessionId;
         }
 
-        // A visible page is active by definition, so being used counts as activity
-        // and slides the window forward. Without this the window would be measured
-        // from initialize() and a tab left open would rotate its session ID part
-        // way through a single continuous visit, splitting one visit across two
-        // sessions and attributing an ad's impression_end to a session that never
-        // saw its impression.
-        if (document.visibilityState !== "hidden") {
+        // A visible page the user is actually on is active by definition, so being
+        // used counts as activity and slides the window forward. Without this the
+        // window would be measured from initialize() and a tab left open would
+        // rotate its session ID part way through a single continuous visit,
+        // splitting one visit across two sessions and attributing an ad's
+        // impression_end to a session that never saw its impression.
+        //
+        // The backgrounded check is what stops that becoming a session that never
+        // expires. A visible tab the browser is not focused on keeps serving its
+        // zones by design, and every one of those requests calls through here, so
+        // without it a page left on a second monitor would slide its own window
+        // forward indefinitely and the inactivity window would be unreachable.
+        if (
+            document.visibilityState !== "hidden" &&
+            !this.sessionIsBackgrounded
+        ) {
             this.#touchSession();
 
             return this.sessionId;
         }
 
-        // Hidden, so the window is genuinely elapsing. Rotate once it runs out.
+        // Not the user's focus, so the window is genuinely elapsing. Rotate once it
+        // runs out.
         if (
             Date.now() - this.sessionLastActiveAt >=
             this.#SESSION_LIFETIME_MS
@@ -1186,6 +1209,18 @@ class AdadaptedJsSdk {
             "focus",
             () => {
                 this.#updateSessionActivity(false);
+            },
+            listenerOptions,
+        );
+
+        // A page that fires "pagehide" is not always going away. iOS Safari fires it
+        // on pages it later brings back, and every zone was reported unmounted on
+        // the way out, so without this they would stay unmounted for the rest of the
+        // page's life - no impressions, no refreshes, and no way to recover.
+        window.addEventListener(
+            "pageshow",
+            () => {
+                this.#onPageShow();
             },
             listenerOptions,
         );
@@ -1288,8 +1323,14 @@ class AdadaptedJsSdk {
             const zone = this.zones[zoneId];
 
             this.#flushZoneUnfilled(zone);
-            this.#trackImpression(zone);
+
+            // Resumed before the impression is tracked, because resuming is what
+            // replaces an ad that aged past its refresh time while the zone was
+            // away. Tracking first would open an impression on the outgoing ad and
+            // close it in the same tick, reporting a zero-duration impression for
+            // an ad the user never actually saw.
             this.#resumeZoneTimer(zone);
+            this.#trackImpression(zone);
         }
     }
 
@@ -1335,6 +1376,31 @@ class AdadaptedJsSdk {
             if (!isEnteringBackForwardCache) {
                 this.#reportZoneUnmounted(zone, true);
             }
+        }
+    }
+
+    /**
+     * Triggered when a page that had been hidden is shown again, whether it was
+     * restored from the back/forward cache or never actually went away.
+     */
+    #onPageShow() {
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            // A zone still marked mounted came back from the back/forward cache,
+            // where nothing was reported on the way out. It needs no second
+            // zone_mounted, only its timer back.
+            if (!zone.mounted) {
+                zone.mounted = true;
+
+                this.#triggerReportZoneEvent(
+                    zone.zoneId,
+                    this.#ReportedEventType.ZONE_MOUNTED,
+                );
+            }
+
+            this.#resumeZoneTimer(zone);
+            this.#trackImpression(zone);
         }
     }
 
@@ -1541,8 +1607,14 @@ class AdadaptedJsSdk {
 
             if (this.#zoneIsOnScreen(zone)) {
                 this.#flushZoneUnfilled(zone);
-                this.#trackImpression(zone);
+
+                // Resumed before the impression is tracked, because resuming is what
+                // replaces an ad that aged past its refresh time while the zone was
+                // away. Tracking first would open an impression on the outgoing ad and
+                // close it in the same tick, reporting a zero-duration impression for
+                // an ad the user never actually saw.
                 this.#resumeZoneTimer(zone);
+                this.#trackImpression(zone);
             } else {
                 this.#endImpression(zone);
                 this.#pauseZoneTimer(zone);
@@ -1786,8 +1858,21 @@ class AdadaptedJsSdk {
 
         this.#reportZoneUnfilled(zone, this.#ZoneUnfilledReason.REQUEST_FAILED);
 
-        // The current refresh time is carried forward so a failing zone still paces
-        // its retries, instead of dropping back to the default every time.
+        // A zone already showing an ad keeps it. The request that failed was a
+        // refresh, and blanking the zone would take a paying ad off the page over a
+        // transient network error and leave the slot empty for a whole cycle. The
+        // timer is restarted so the zone tries again, carrying the current refresh
+        // time forward so a failing zone still paces its retries rather than
+        // dropping back to the default every time.
+        //
+        // A zone with nothing displayed is the other case and does clear, so its
+        // container does not keep whatever it had before the request.
+        if (zone.currentAd) {
+            this.#restartZoneTimer(zone, zone.refreshSeconds);
+
+            return;
+        }
+
         this.#displayAd(zone, undefined, zone.refreshSeconds);
     }
 
@@ -1934,26 +2019,17 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Updates the record of which zones have an ad available, and hands the
-     * current state of that record to the client.
+     * Tells the client whether a zone ended up with an ad to show.
+     *
+     * Reported one zone at a time, because that is how the ads now arrive: each
+     * zone asks for its own ad and hears back on its own schedule. An aggregate
+     * across all zones could only be produced by guessing at the ones that had not
+     * answered yet, and a zone still waiting is not a zone without an ad.
      * @param {string} zoneId - The ad zone ID.
      * @param {boolean} hasAd - If true, an ad is available for the zone.
      */
     #updateAdAvailability(zoneId, hasAd) {
-        this.adZoneAdAvailabilityMap[zoneId] = hasAd;
-
-        // Ensure every zone the client asked for is represented, so the map has the
-        // same shape the previous bulk response produced.
-        for (const knownZoneId of Object.keys(this.zonePlacements || {})) {
-            if (this.adZoneAdAvailabilityMap[knownZoneId] === undefined) {
-                this.adZoneAdAvailabilityMap[knownZoneId] = false;
-            }
-        }
-
-        // Trigger the callback to let the app know what ad zones have ads.
-        this.#invokeClientCallback("onAdsRetrieved", {
-            ...this.adZoneAdAvailabilityMap,
-        });
+        this.#invokeClientCallback("onAdRetrieved", zoneId, hasAd);
     }
 
     /**
@@ -1998,9 +2074,12 @@ class AdadaptedJsSdk {
             return;
         }
 
-        // Rotated out, so the ad the zone was showing is done.
-        this.#endImpression(zone);
-
+        // The impression is deliberately left open here. The ad is still on the
+        // page until its replacement actually arrives, and #displayAd closes it at
+        // that moment. Closing it now would end the impression early on every
+        // rotation, and on a refresh that fails the zone keeps the ad it already
+        // has - leaving it in front of the user with its impression already closed
+        // and no way to reopen it, since the impression ID belongs to the ad.
         this.#fetchAd(zone);
     }
 
@@ -2159,6 +2238,22 @@ class AdadaptedJsSdk {
             undefined,
             useKeepalive,
         );
+    }
+
+    /**
+     * Closes out every impression still open across all zones, so none of them
+     * straddles a change of session ID.
+     */
+    #closeOpenImpressions() {
+        this.#sessionRotating = true;
+
+        try {
+            for (const zoneId of Object.keys(this.zones)) {
+                this.#endImpression(this.zones[zoneId]);
+            }
+        } finally {
+            this.#sessionRotating = false;
+        }
     }
 
     /**
@@ -2556,7 +2651,11 @@ class AdadaptedJsSdk {
                         productDiscount,
                         productImage,
                     ) => {
-                        this.onAddItemsTriggered([
+                        // Routed through the same helper as every other client
+                        // callback: this one is invoked from a message handler, so
+                        // a host that throws would otherwise take out the rest of
+                        // the popover's handling with it.
+                        this.#invokeClientCallback("onAddItemsTriggered", [
                             {
                                 tracking_id: trackingId,
                                 product_title: productTitle,
@@ -2572,9 +2671,16 @@ class AdadaptedJsSdk {
                 };
             }
 
+            // Sent with keepalive because a click is by construction the last
+            // thing the user does in the page: the handlers it runs open a new
+            // tab or hand control to the host, which routinely navigates away.
+            // A plain request is cancelled with the document and the click -
+            // the highest value event the SDK reports - is lost silently.
             this.#triggerReportAdEvent(
                 currentAd,
                 this.#ReportedEventType.INTERACTION,
+                undefined,
+                true,
             );
         } else if (
             ((this.#getOperatingSystem() === this.#DeviceOS.DESKTOP &&
@@ -2590,9 +2696,16 @@ class AdadaptedJsSdk {
 
             window.open(currentAd.action_path, "_blank");
 
+            // Sent with keepalive because a click is by construction the last
+            // thing the user does in the page: the handlers it runs open a new
+            // tab or hand control to the host, which routinely navigates away.
+            // A plain request is cancelled with the document and the click -
+            // the highest value event the SDK reports - is lost silently.
             this.#triggerReportAdEvent(
                 currentAd,
                 this.#ReportedEventType.INTERACTION,
+                undefined,
+                true,
             );
 
             // NOTE: Circulars will not work in their current state for desktop. Circulars will need
@@ -3226,6 +3339,50 @@ class AdadaptedJsSdk {
     // }
 
     /**
+     * Decides whether a request can actually be sent with keepalive.
+     *
+     * The browser gives a document a single 64KB budget for keepalive request
+     * bodies, shared across every keepalive request in flight - and shared with
+     * whatever sendBeacon the host page's own analytics fire at the same moment.
+     * A request that breaches it does not degrade: fetch rejects outright and the
+     * whole body is lost. The reports that can grow are the batch ones, which send
+     * an event per item and are exactly the reports worth keeping, so an oversized
+     * body drops keepalive instead. That request is then only lost if the page
+     * really is being torn down, which is the behaviour it had before keepalive.
+     * @param {boolean} requested - Whether the caller asked for keepalive.
+     * @param {string} bodyData - The serialized request body, if there is one.
+     * @returns true if the request should be sent with keepalive.
+     */
+    #canUseKeepalive(requested, bodyData) {
+        if (!requested) {
+            return false;
+        }
+
+        if (!bodyData) {
+            return true;
+        }
+
+        // Deliberately well under the 64KB budget. The page's own beacons are drawn
+        // from the same allowance, and the count is of bytes rather than characters,
+        // so a body of multi byte characters is larger than its length suggests.
+        const keepaliveBodyByteLimit = 48 * 1024;
+        const bodyByteLength =
+            typeof TextEncoder === "function"
+                ? new TextEncoder().encode(bodyData).length
+                : bodyData.length;
+
+        if (bodyByteLength <= keepaliveBodyByteLimit) {
+            return true;
+        }
+
+        console.warn(
+            `A report of ${bodyByteLength} bytes is too large to be sent with keepalive, so it will be lost if the page closes before it completes.`,
+        );
+
+        return false;
+    }
+
+    /**
      * Handles sending an API request with the fetch API.
      * @param {object} settings - All settings to apply to the request.
      * @param {string} settings.method - The request method to use (GET, POST, etc.)
@@ -3275,7 +3432,7 @@ class AdadaptedJsSdk {
             body: bodyData,
             // Used for the events reported as the page is going away, so the browser
             // is allowed to finish sending them after the page is gone.
-            keepalive: settings.keepalive ? true : false,
+            keepalive: this.#canUseKeepalive(settings.keepalive, bodyData),
         })
             .then(async (response) => {
                 // Not every endpoint returns a body, and an error page may not be
@@ -3352,7 +3509,36 @@ class AdadaptedJsSdk {
      * last time the page was known to be active, so a tab that stays in use keeps
      * its session ID rather than rotating mid-use.
      */
+    /**
+     * The SHA-256 of the API key, used to key the stored session so two apps on the
+     * same origin cannot read each other's. Private: it is derived from a client
+     * credential and no consumer has any use for it.
+     */
+    #hashedApiKey;
+
+    /**
+     * The API environment as the plain string "prod" or "dev", as opposed to
+     * apiEnv, which is the resolved URL. Private: only the stored session key
+     * needs it, and two public fields with names this close invite picking the
+     * wrong one.
+     */
+    #apiEnvString = "prod";
+
+    /**
+     * When the current session was first created. Private: internal session
+     * bookkeeping, and getSessionId() is the supported way to observe a session.
+     */
+    #sessionCreatedAt;
+
     #SESSION_LIFETIME_MS = 30 * 60 * 1000;
+
+    /**
+     * True while a session is being replaced. Closing out the impressions that
+     * belong to the outgoing session reports events, and reporting an event asks
+     * for the session ID, which would otherwise notice the expired window and
+     * start replacing the session again from inside the replacement.
+     */
+    #sessionRotating = false;
 
     /**
      * The prefix identifying a session as having come from this SDK.

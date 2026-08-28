@@ -240,11 +240,13 @@ export const App: FC = (): ReactElement => {
         ],
     };
 
-    const sdk = new AdadaptedJsSdk();
 
     let keywordSearchTimer: number | undefined;
 
-    const [jsSdk] = useState(sdk);
+    // The initializer form matters: `new AdadaptedJsSdk()` written directly in the
+    // component body constructs a fresh instance on every render and throws all but
+    // the first away.
+    const [jsSdk] = useState(() => new AdadaptedJsSdk());
     const [itemSearchResults, setItemSearchResults] = useState<SearchResults>({
         keywordResult: [],
         itemResult: [],
@@ -354,9 +356,14 @@ export const App: FC = (): ReactElement => {
      * @param keywordTermId - If provided, the selected term ID will be reported.
      */
     const addItemsToList = (itemList: AddToListOrCartItem[], keywordTermId?: string): void => {
+        // Derived from the input rather than accumulated inside the updater below,
+        // which React may run more than once for a single update.
+        const itemNameReportList = itemList
+            .filter((item) => item.aaProduct)
+            .map((item) => item.name);
+
         setUserListItems((prevUserListItems) => {
             const finalListItems = [...prevUserListItems];
-            const itemNameReportList: string[] = [];
 
             for (const item of itemList) {
                 let itemFound = false;
@@ -379,23 +386,22 @@ export const App: FC = (): ReactElement => {
                         isCrossedOff: false,
                     });
                 }
-
-                if (item.aaProduct) {
-                    itemNameReportList.push(item.name);
-                }
-            }
-
-            if (keywordTermId) {
-                jsSdk.reportKeywordInterceptTermSelected(keywordTermId);
-            }
-
-            if (itemNameReportList.length) {
-                jsSdk.acknowledgeAdded();
-                jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
             }
 
             return finalListItems;
         });
+
+        // Reported outside the state updater on purpose. React is free to call an
+        // updater more than once for a single update, and does so deliberately in
+        // StrictMode, so reporting from inside one sends every event twice.
+        if (keywordTermId) {
+            jsSdk.reportKeywordInterceptTermSelected(keywordTermId);
+        }
+
+        if (itemNameReportList.length) {
+            jsSdk.acknowledgeAdded();
+            jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
+        }
     };
 
     /**
@@ -404,9 +410,13 @@ export const App: FC = (): ReactElement => {
      * @param keywordTermId - If provided, the selected term ID will be reported.
      */
     const addItemsToCart = (itemList: AddToListOrCartItem[], keywordTermId?: string): void => {
+        // Derived from the input, for the same reason as the list.
+        const itemNameReportList = itemList
+            .filter((item) => item.aaProduct)
+            .map((item) => item.name);
+
         setUserCartItems((prevUserCartItems) => {
             const finalCartItems = [...prevUserCartItems];
-            const itemNameReportList: string[] = [];
 
             for (const item of itemList) {
                 let itemFound = false;
@@ -428,23 +438,20 @@ export const App: FC = (): ReactElement => {
                         quantity: 1,
                     });
                 }
-
-                if (item.aaProduct) {
-                    itemNameReportList.push(item.name);
-                }
-            }
-
-            if (keywordTermId) {
-                jsSdk.reportKeywordInterceptTermSelected(keywordTermId);
-            }
-
-            if (itemNameReportList.length) {
-                jsSdk.acknowledgeAdded();
-                jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
             }
 
             return finalCartItems;
         });
+
+        // Reported outside the state updater, for the same reason as the list.
+        if (keywordTermId) {
+            jsSdk.reportKeywordInterceptTermSelected(keywordTermId);
+        }
+
+        if (itemNameReportList.length) {
+            jsSdk.acknowledgeAdded();
+            jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
+        }
     };
 
     /**
@@ -521,11 +528,19 @@ export const App: FC = (): ReactElement => {
                 enableKeywordIntercept: true,
                 apiEnv: sdkAppDetails.apiEnv,
                 zonePlacements,
-                // scrollContainerId: "adUnitsSection",
+                // NOTE: scrollContainerId is deliberately not set. It becomes the
+                //       root the zones' visibility is measured against, so it has
+                //       to be an ancestor of every placement element - and these
+                //       zones live in two different sections. Naming one of them
+                //       would leave the other permanently invisible to the SDK.
                 params: {
                     // storeId: "230",
                     recipeContextId: "1167",
-                    recipeContextZoneIds: ["102133", "102134"],
+                    // These have to be zones this app actually renders, or the
+                    // context is dropped and every ad request goes out without it.
+                    recipeContextZoneIds: sdkAppDetails.zonePlacements.map(
+                        (placement) => placement.zoneId,
+                    ),
                 },
                 onAddItemsTriggered: (items) => {
                     setPendingAtlItems(items);
@@ -541,9 +556,18 @@ export const App: FC = (): ReactElement => {
                     }
 
                     setPendingAtlItems(payloadItems);
+
+                    // The API needs telling the payload arrived, otherwise it has
+                    // no way to know it was delivered.
+                    jsSdk.updatePayloadStatus(
+                        payloads.map((payload) => ({
+                            payload_id: payload.payload_id,
+                            status: "delivered",
+                        })),
+                    );
                 },
-                onAdsRetrieved: (adZoneAdAvailabilityMap) => {
-                    console.log({ adZoneAdAvailabilityMap });
+                onAdRetrieved: (zoneId, hasAd) => {
+                    console.log("Ad retrieved", { zoneId, hasAd });
                 },
             })
             .then(() => {
@@ -560,7 +584,14 @@ export const App: FC = (): ReactElement => {
             .catch((err) => {
                 console.error(err);
             });
-    }, []);
+
+        // Without this the SDK's IntersectionObserver, the per zone refresh timers
+        // and its document listeners all outlive the component. In StrictMode this
+        // also keeps the development double mount from initializing twice over.
+        return () => {
+            jsSdk.unmount();
+        };
+    }, [jsSdk]);
 
     useEffect(() => {
         if (itemSearchResults.keywordResult.length) {

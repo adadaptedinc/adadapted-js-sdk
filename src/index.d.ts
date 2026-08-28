@@ -12,19 +12,10 @@ declare class AdadaptedJsSdk {
     enableKeywordIntercept: boolean;
     zonePlacements: any;
     apiEnv: string;
-    apiEnvString: string;
     listManagerApiEnv: string;
     payloadApiEnv: string;
     deviceOs: any;
     sessionId: any;
-    sessionCreatedAt: number | undefined;
-    sessionLastActiveAt: number | undefined;
-    sessionPersistedAt: number | undefined;
-    /**
-     * True while the page is not the user's current focus, either because the tab
-     * is not the shown tab or because the browser is not the focused application.
-     */
-    sessionIsBackgrounded: boolean;
     lastSelectedATL: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
@@ -32,25 +23,11 @@ declare class AdadaptedJsSdk {
     scrollContainerId: string | undefined;
     deviceLocale: string | undefined;
     params: { [key: string]: any } | undefined;
-    /**
-     * Map of {Zone ID -> internal zone state}. Each zone owns its own ad request,
-     * refresh countdown, and impression tracking.
-     */
-    zones: { [key: string]: any };
-    /**
-     * Map of {Zone ID -> whether an ad is currently available for the zone}.
-     */
-    adZoneAdAvailabilityMap: { [key: string]: boolean };
-    intersectionObserver: any;
-    documentEventAbortController: any;
-    hashedApiKey: string | undefined;
     onAdZonesRefreshed: () => void;
     onAddItemsTriggered: (items: AdadaptedJsSdk.DetailedListItem[]) => void;
     onExternalContentAdClicked: (adId: string) => void;
     onPayloadsAvailable: (payloads: AdadaptedJsSdk.Payload[]) => void;
-    onAdsRetrieved: (adZoneAdAvailabilityMap: {
-        [key: string]: boolean;
-    }) => void;
+    onAdRetrieved: (zoneId: string, hasAd: boolean) => void;
     /**
      * Gets the current session ID.
      * NOTE: This is only exposed for developer validation if needed.
@@ -218,8 +195,16 @@ declare namespace AdadaptedJsSdk {
          */
         zonePlacements?: ZonePlacements;
         /**
-         * The ID of the scroll container the ad zones are placed within.
-         * If an ID is not provided, the scoll event will be assigned to the document.
+         * The ID of the element the ad zones scroll within, used to decide when a
+         * zone is actually in front of the user. If an ID is not provided, zones are
+         * measured against the browser viewport.
+         *
+         * NOTE: When an ID is given, a zone counts as on screen while it is within
+         *       that element's visible box, which is not the same question as
+         *       whether it is within the viewport. Supply this only for a container
+         *       that is itself the scrolling region, and make sure it is an ancestor
+         *       of every placement element - a zone outside it is never reported as
+         *       visible at all, so it will never record an impression or refresh.
          */
         scrollContainerId?: string;
         /**
@@ -256,12 +241,12 @@ declare namespace AdadaptedJsSdk {
          */
         onPayloadsAvailable?(payloads: Payload[]): void;
         /**
-         * Callback that gets triggered when ads have been retrieved.
-         * @param adZoneAdAvailabilityMap - A mapping of all ad zones and true/false based on if ads are available for a given ad zone.
+         * Callback that gets triggered when a zone's ad request has resolved, told
+         * one zone at a time as each answers on its own schedule.
+         * @param zoneId - The ad zone the result is for.
+         * @param hasAd - True if an ad is available for that zone.
          */
-        onAdsRetrieved?(adZoneAdAvailabilityMap: {
-            [key: string]: boolean;
-        }): void;
+        onAdRetrieved?(zoneId: string, hasAd: boolean): void;
     }
 
     /**
@@ -499,8 +484,10 @@ declare namespace AdadaptedJsSdk {
         /**
          * The ad to display within the zone. An ad with an empty {@link Ad.id} means
          * the API had nothing to serve, and only its refresh_time is meaningful.
+         * Optional: a no-fill can also come back with no ad object at all, and the
+         * SDK treats both the same way.
          */
-        ad: Ad;
+        ad?: Ad;
         /**
          * The optimized height of the zone.
          */
@@ -517,7 +504,8 @@ declare namespace AdadaptedJsSdk {
      * - "e"  open a URL in a new tab
      * - "l"  open a URL in an in-page view
      * - "p"  open a URL in an in-page view, same behaviour as "l"
-     * - "a"  open an app store URL
+     * - "a"  an app store URL. NOTE: not handled - the SDK logs that it cannot
+     *        action the type, reports nothing, and leaves the ad in place.
      * - "n"  no action
      * NOTE: Declared inside this namespace rather than at the top level of the
      *       file, because the `export =` on line 1 cannot coexist with another top
@@ -560,7 +548,11 @@ declare namespace AdadaptedJsSdk {
         /**
          * The items to add to a list or cart, for add-to-list ads.
          */
-        payload: AdPayload;
+        /**
+         * The items an "add to list" ad carries. Optional: the API does not send it
+         * for every ad, and the SDK checks for it before reading it.
+         */
+        payload?: AdPayload;
         /**
          * The ID of the zone the ad was served for.
          * NOTE: Set by the SDK rather than the API, so every reported event can name
