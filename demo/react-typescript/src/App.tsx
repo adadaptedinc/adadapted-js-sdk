@@ -255,6 +255,10 @@ export const App: FC = (): ReactElement => {
     const [userCartItems, setUserCartItems] = useState<Item[]>([]);
     const [isCartOpen, setIsCartOpen] = useState(false);
     const [pendingAtlItems, setPendingAtlItems] = useState<AdadaptedJsSdk.DetailedListItem[] | undefined>(undefined);
+    // The click those items came from, kept so the acknowledgement can be tied back
+    // to it. Undefined when the items arrived from a payload rather than an ad
+    // click, in which case there is no interaction to report.
+    const [pendingAtlContent, setPendingAtlContent] = useState<AdadaptedJsSdk.AtlAdContent | undefined>(undefined);
     const [availableKeywordIntercepts, setAvailableKeywordIntercepts] = useState<
         AdadaptedJsSdk.KeywordSearchTerm[] | undefined
     >(undefined);
@@ -355,7 +359,11 @@ export const App: FC = (): ReactElement => {
      * @param itemList - The item list to add to the list.
      * @param keywordTermId - If provided, the selected term ID will be reported.
      */
-    const addItemsToList = (itemList: AddToListOrCartItem[], keywordTermId?: string): void => {
+    const addItemsToList = (
+        itemList: AddToListOrCartItem[],
+        keywordTermId?: string,
+        atlContent?: AdadaptedJsSdk.AtlAdContent,
+    ): void => {
         // Derived from the input rather than accumulated inside the updater below,
         // which React may run more than once for a single update.
         const itemNameReportList = itemList
@@ -399,7 +407,11 @@ export const App: FC = (): ReactElement => {
         }
 
         if (itemNameReportList.length) {
-            jsSdk.acknowledgeAdded();
+            // Acknowledged through the handle from onAddItemsTriggered rather than
+            // jsSdk.acknowledgeAdded(), which cannot tell which click it is
+            // confirming. Absent when the items did not come from an ad click, and
+            // then there is no interaction to report at all.
+            atlContent?.acknowledge();
             jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
         }
     };
@@ -409,7 +421,11 @@ export const App: FC = (): ReactElement => {
      * @param itemList - The item list to add to the cart.
      * @param keywordTermId - If provided, the selected term ID will be reported.
      */
-    const addItemsToCart = (itemList: AddToListOrCartItem[], keywordTermId?: string): void => {
+    const addItemsToCart = (
+        itemList: AddToListOrCartItem[],
+        keywordTermId?: string,
+        atlContent?: AdadaptedJsSdk.AtlAdContent,
+    ): void => {
         // Derived from the input, for the same reason as the list.
         const itemNameReportList = itemList
             .filter((item) => item.aaProduct)
@@ -449,7 +465,11 @@ export const App: FC = (): ReactElement => {
         }
 
         if (itemNameReportList.length) {
-            jsSdk.acknowledgeAdded();
+            // Acknowledged through the handle from onAddItemsTriggered rather than
+            // jsSdk.acknowledgeAdded(), which cannot tell which click it is
+            // confirming. Absent when the items did not come from an ad click, and
+            // then there is no interaction to report at all.
+            atlContent?.acknowledge();
             jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
         }
     };
@@ -542,8 +562,9 @@ export const App: FC = (): ReactElement => {
                         (placement) => placement.zoneId,
                     ),
                 },
-                onAddItemsTriggered: (items) => {
+                onAddItemsTriggered: (items, adContent) => {
                     setPendingAtlItems(items);
+                    setPendingAtlContent(adContent);
                 },
                 onExternalContentAdClicked: (adId) => {
                     console.log("External Ad Clicked", adId);
@@ -556,6 +577,7 @@ export const App: FC = (): ReactElement => {
                     }
 
                     setPendingAtlItems(payloadItems);
+                    setPendingAtlContent(undefined);
 
                     // The API needs telling the payload arrived, otherwise it has
                     // no way to know it was delivered.
@@ -608,6 +630,7 @@ export const App: FC = (): ReactElement => {
     useEffect(() => {
         if (pendingAtlItems) {
             setPendingAtlItems(undefined);
+            setPendingAtlContent(undefined);
         }
     }, [userListItems, userCartItems]);
 
@@ -903,7 +926,7 @@ export const App: FC = (): ReactElement => {
                                     }
                                 }
 
-                                addItemsToCart(finalItems);
+                                addItemsToCart(finalItems, undefined, pendingAtlContent);
                             }}
                         >
                             My Cart
@@ -924,7 +947,7 @@ export const App: FC = (): ReactElement => {
                                     }
                                 }
 
-                                addItemsToList(finalItems);
+                                addItemsToList(finalItems, undefined, pendingAtlContent);
                             }}
                         >
                             My Shopping List

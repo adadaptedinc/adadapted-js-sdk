@@ -16,7 +16,6 @@ declare class AdadaptedJsSdk {
     payloadApiEnv: string;
     deviceOs: any;
     sessionId: any;
-    lastSelectedATL: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
     initialBodyOverflowStyle: string;
@@ -24,7 +23,10 @@ declare class AdadaptedJsSdk {
     deviceLocale: string | undefined;
     params: { [key: string]: any } | undefined;
     onAdZonesRefreshed: () => void;
-    onAddItemsTriggered: (items: AdadaptedJsSdk.DetailedListItem[]) => void;
+    onAddItemsTriggered: (
+        items: AdadaptedJsSdk.DetailedListItem[],
+        adContent: AdadaptedJsSdk.AtlAdContent,
+    ) => void;
     onExternalContentAdClicked: (adId: string) => void;
     onPayloadsAvailable: (payloads: AdadaptedJsSdk.Payload[]) => void;
     onAdRetrieved: (zoneId: string, hasAd: boolean) => void;
@@ -79,8 +81,17 @@ declare class AdadaptedJsSdk {
      */
     reportKeywordInterceptTermsPresented(termIds: string[]): void;
     /**
-     * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
-     * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
+     * Confirms that the items from an "add to list" ad click reached the user's
+     * list, which is what reports that ad's interaction. Clicks on these ads are
+     * not counted at the moment of the click, because the items still have to
+     * arrive somewhere and only the host knows whether they did.
+     *
+     * @deprecated Call `acknowledge()` on the {@link AdadaptedJsSdk.AtlAdContent}
+     * handed to `onAddItemsTriggered` instead. This method cannot say which click
+     * is being confirmed, so it resolves the oldest one still outstanding. Ads are
+     * now served per zone, so a user can click two "add to list" ads before the
+     * first is confirmed, and confirming them out of order reports each interaction
+     * against the wrong ad.
      */
     acknowledgeAdded(): void;
     /**
@@ -228,8 +239,12 @@ declare namespace AdadaptedJsSdk {
         /**
          * Callback that gets triggered when "add to list" or "add to cart" item/items are clicked.
          * @param items - The array of items to add.
+         * @param adContent - The click these items came from. Call its `acknowledge()` once the items have reached the user's list, which is what reports the ad's interaction.
          */
-        onAddItemsTriggered?(items: DetailedListItem[]): void;
+        onAddItemsTriggered?(
+            items: DetailedListItem[],
+            adContent: AtlAdContent,
+        ): void;
         /**
          * Callback that gets triggered when ads that represent external(non-app) content are clicked.
          * @param adId - The ID of the ad.
@@ -394,6 +409,35 @@ declare namespace AdadaptedJsSdk {
     /**
      * The definition of a Detailed List Item.
      */
+    /**
+     * One "add to list" ad click, handed to `onAddItemsTriggered` alongside the
+     * items so the confirmation can be tied back to the click that produced it.
+     *
+     * Clicking an "add to list" ad is not on its own the interaction: the items
+     * still have to reach the user's list, and only the host app knows whether
+     * they did. The handle is what says which click is being confirmed - the zone
+     * has already rotated on to its next ad by the time the host is done, and with
+     * ads served per zone there can be more than one click outstanding at once.
+     */
+    export interface AtlAdContent {
+        /**
+         * The ad the items came from.
+         */
+        adId: string;
+        /**
+         * The zone that ad was served into.
+         */
+        zoneId: string;
+        /**
+         * Reports the ad's interaction, confirming the items reached the list.
+         *
+         * Safe to call more than once - only the first call reports anything. Also
+         * safe to call late, including after the SDK has been unmounted, in which
+         * case it does nothing.
+         */
+        acknowledge(): void;
+    }
+
     export interface DetailedListItem {
         /**
          * The barcode of the product.

@@ -155,19 +155,6 @@ const baseTestProps: AdadaptedJsSdk.InitializeProps = {
     },
 };
 
-const selectedATL: AdadaptedJsSdk.Ad = {
-    id: "TEST_ATL_AD_ID",
-    impression_id: "",
-    refresh_time: 999999,
-    creative_url: "",
-    action_path: "",
-    action_type: "c",
-    payload: {
-        detailed_list_items: [],
-    },
-    zone_id: TEST_ZONE_1_ID,
-};
-
 const testCartId = "TEST_CART_ID";
 const testListName = "TEST_LIST_NAME";
 const testItemNames = ["ITEM_NAME_1", "ITEM_NAME_2", "ITEM_NAME_3"];
@@ -577,7 +564,13 @@ describe("AdadaptedJsSdk", () => {
             await flushPromises();
 
             expect(() => testSdk.onAdZonesRefreshed()).not.toThrow();
-            expect(() => testSdk.onAddItemsTriggered([])).not.toThrow();
+            expect(() =>
+                testSdk.onAddItemsTriggered([], {
+                    adId: "",
+                    zoneId: "",
+                    acknowledge: () => {},
+                }),
+            ).not.toThrow();
             expect(() =>
                 testSdk.onExternalContentAdClicked("AD_ID"),
             ).not.toThrow();
@@ -898,56 +891,224 @@ describe("AdadaptedJsSdk", () => {
     });
 
     describe("acknowledgeAdded()", () => {
-        it("lastSelectedATL is undefined", () => {
-            const consoleErrorSpy = jest.spyOn(console, "error");
+        /**
+         * Serves an add-to-list ad into both zones, so two clicks can be left
+         * outstanding at the same time.
+         */
+        const serveAtlAdsToBothZones = () => {
+            fetchMock = mockFetch({
+                adsByZoneId: {
+                    [TEST_ZONE_1_ID]: testAtlAd,
+                    [TEST_ZONE_2_ID]: {
+                        ...testAtlAd,
+                        id: "SECOND_ATL_AD",
+                        impression_id: "SECOND_ATL_IMPRESSION",
+                    },
+                },
+            });
+        };
+
+        it("logs when nothing is waiting to be acknowledged", () => {
+            const consoleErrorSpy = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => {});
             const testSdk = sdk!;
-            testSdk.lastSelectedATL = undefined;
 
             testSdk.acknowledgeAdded();
 
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An ATL ad must be selected by the user in order to acknowledge item being added to list.`,
             );
+
+            consoleErrorSpy.mockRestore();
         });
 
-        it("lastSelectedATL is defined but the request fails", async () => {
-            // @ts-ignore
-            global.fetch = jest.fn(() => Promise.reject());
-
-            const flushPromises = () => new Promise(setImmediate);
-            const consoleErrorSpy = jest.spyOn(console, "error");
+        it("reports the interaction for the ad the user actually clicked", async () => {
             const testSdk = sdk!;
-            testSdk.lastSelectedATL = selectedATL;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+            testSdk.acknowledgeAdded();
+
+            await flushPromises();
+
+            const interactions = getReportedAdEvents(fetchMock, "interaction");
+
+            expect(interactions).toHaveLength(1);
+            expect(interactions[0].ad_id).toBe(testAtlAd.id);
+        });
+
+        it("logs when the interaction request fails", async () => {
+            const consoleErrorSpy = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => {});
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            fetchMock = mockFetch({ rejectUrlsContaining: [AD_EVENTS_URL] });
+            global.fetch = fetchMock as any;
 
             testSdk.acknowledgeAdded();
 
             await flushPromises();
 
-            expect(fetch).toHaveBeenCalled();
             expect(consoleErrorSpy).toHaveBeenCalledWith(
                 `An error occurred reporting a user "interaction" event.`,
             );
+
+            consoleErrorSpy.mockRestore();
         });
 
-        it("lastSelectedATL is defined and the request succeeds", async () => {
-            const flushPromises = () => new Promise(setImmediate);
+        it("resolves the oldest outstanding click, so a second one is not lost", async () => {
+            serveAtlAdsToBothZones();
+
             const testSdk = sdk!;
-            testSdk.lastSelectedATL = selectedATL;
-            testSdk.deviceOs = "android";
-            testSdk.advertiserId = "TEST_ADVERTISER_ID";
+
+            await testSdk.initialize(baseTestProps);
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            // Both zones are clicked before either is confirmed, which a single
+            // shared slot could not represent: the second click overwrote the
+            // first, so the first zone's interaction was lost outright and the
+            // second acknowledgement had nothing left to resolve.
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+            fireEvent.click(document.querySelector("#zone2 .clickable-area")!);
 
             testSdk.acknowledgeAdded();
 
             await flushPromises();
 
-            expect(fetch).toHaveBeenCalled();
-            expect(fetch).toHaveBeenCalledWith(
-                "https://ads.adadapted.com/v/1.0.0/ad/events",
-                expect.objectContaining({
-                    body: expect.stringContaining(
-                        `"udid":"${testSdk.advertiserId}"`,
-                    ),
-                }),
+            // Oldest first: hosts confirm in the order they were called, so the
+            // first confirmation belongs to the first click.
+            expect(
+                getReportedAdEvents(fetchMock, "interaction").map(
+                    (event) => event.ad_id,
+                ),
+            ).toEqual([testAtlAd.id]);
+
+            testSdk.acknowledgeAdded();
+
+            await flushPromises();
+
+            expect(
+                getReportedAdEvents(fetchMock, "interaction").map(
+                    (event) => event.ad_id,
+                ),
+            ).toEqual([testAtlAd.id, "SECOND_ATL_AD"]);
+        });
+    });
+
+    describe("the add-to-list acknowledgement handle", () => {
+        it("reports against its own ad, whatever else has been clicked since", async () => {
+            fetchMock = mockFetch({
+                adsByZoneId: {
+                    [TEST_ZONE_1_ID]: testAtlAd,
+                    [TEST_ZONE_2_ID]: {
+                        ...testAtlAd,
+                        id: "SECOND_ATL_AD",
+                        impression_id: "SECOND_ATL_IMPRESSION",
+                    },
+                },
+            });
+
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+            fireEvent.click(document.querySelector("#zone2 .clickable-area")!);
+
+            expect(handles).toHaveLength(2);
+
+            // Confirmed in the opposite order to the clicks, which is the case a
+            // host with an async list write can genuinely produce and the case the
+            // deprecated no-argument method cannot get right.
+            handles[1].acknowledge();
+            handles[0].acknowledge();
+
+            await flushPromises();
+
+            const interactions = getReportedAdEvents(fetchMock, "interaction");
+
+            expect(interactions.map((event) => event.ad_id)).toEqual([
+                "SECOND_ATL_AD",
+                testAtlAd.id,
+            ]);
+            expect(interactions.map((event) => event.zone_id)).toEqual([
+                TEST_ZONE_2_ID,
+                TEST_ZONE_1_ID,
+            ]);
+        });
+
+        it("reports one interaction however many times it is acknowledged", async () => {
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fetchMock.mockClear();
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            handles[0].acknowledge();
+            handles[0].acknowledge();
+            testSdk.acknowledgeAdded();
+
+            await flushPromises();
+
+            expect(getReportedAdEvents(fetchMock, "interaction")).toHaveLength(
+                1,
+            );
+        });
+
+        it("reports nothing when acknowledged after the SDK is unmounted", async () => {
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            testSdk.unmount();
+            fetchMock.mockClear();
+
+            handles[0].acknowledge();
+
+            await flushPromises();
+
+            expect(getReportedAdEvents(fetchMock, "interaction")).toHaveLength(
+                0,
             );
         });
     });
@@ -1575,6 +1736,11 @@ describe("AdadaptedJsSdk", () => {
 
             expect(onAddItemsTriggered).toHaveBeenCalledWith(
                 testAtlAd.payload.detailed_list_items,
+                expect.objectContaining({
+                    adId: testAtlAd.id,
+                    zoneId: TEST_ZONE_1_ID,
+                    acknowledge: expect.any(Function),
+                }),
             );
 
             // Clicks on add-to-list ads are only reported once the client confirms

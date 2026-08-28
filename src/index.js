@@ -24,7 +24,6 @@ class AdadaptedJsSdk {
         this.sessionLastActiveAt = undefined;
         this.sessionPersistedAt = undefined;
         this.sessionIsBackgrounded = false;
-        this.lastSelectedATL = undefined;
         this.keywordIntercepts = undefined;
         this.keywordInterceptSearchValue = "";
         this.initialBodyOverflowStyle = document.body.style.overflow;
@@ -542,29 +541,119 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
-     * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
-     * NOTE: This method is not optional. The client must trigger this method.
+     * Builds the handle handed to the host alongside an "add to list" ad's items,
+     * so the acknowledgement can be tied back to the click that produced it.
+     *
+     * The ad is captured here rather than looked up later because the zone rotates
+     * on to its next ad as soon as the click is handled, so by the time the host
+     * confirms, the zone is showing something else entirely.
+     * @param {object} ad - The ad the items came from.
+     * @param {boolean} isAlreadyReported - True if the interaction for this ad has already been reported, so acknowledging must not report a second one.
+     * @returns the handle to hand to the client.
+     */
+    #createAtlContent(ad, isAlreadyReported) {
+        const reportedAd = { ...ad };
+        const createdInGeneration = this.#atlGeneration;
+        let isHandled = isAlreadyReported === true;
+
+        const atlContent = {
+            adId: reportedAd.id,
+            zoneId: reportedAd.zone_id,
+            acknowledge: () => {
+                // Guarded so a host that confirms twice reports one interaction,
+                // the way AdContent.isHandled does on the native SDKs. The
+                // generation check is the same idea across a teardown: the host may
+                // still be holding this handle long after the click stopped meaning
+                // anything.
+                if (isHandled || createdInGeneration !== this.#atlGeneration) {
+                    return;
+                }
+
+                isHandled = true;
+
+                this.#forgetPendingAtlClick(atlContent);
+
+                // Sent with keepalive for the same reason the click itself is: this
+                // is the deferred half of that click, and the host may well navigate
+                // on the back of the same user action.
+                this.#triggerReportAdEvent(
+                    reportedAd,
+                    this.#ReportedEventType.INTERACTION,
+                    undefined,
+                    true,
+                );
+            },
+        };
+
+        // An interaction already counted is not pending anything, so it is not
+        // queued - acknowledgeAdded() must never find it and report a duplicate.
+        if (!isAlreadyReported) {
+            this.#pendingAtlClicks.push(atlContent);
+
+            while (
+                this.#pendingAtlClicks.length > this.#MAX_PENDING_ATL_CLICKS
+            ) {
+                const dropped = this.#pendingAtlClicks.shift();
+
+                console.warn(
+                    `The "add to list" click on ad "${dropped.adId}" was never acknowledged and has been dropped.`,
+                );
+            }
+        }
+
+        return atlContent;
+    }
+
+    /**
+     * Abandons every click still waiting on the host.
+     *
+     * The generation is bumped rather than the handles being altered, because the
+     * host is holding those handles. A confirmation arriving after teardown would
+     * otherwise fire a request off the back of an SDK that no longer exists, and
+     * one arriving after a second initialize() would report against the session
+     * that replaced the one the click belonged to.
+     */
+    #discardPendingAtlClicks() {
+        this.#atlGeneration = this.#atlGeneration + 1;
+        this.#pendingAtlClicks = [];
+    }
+
+    /**
+     * Drops a click from the pending list, however it came to be resolved.
+     * @param {object} atlContent - The handle to forget.
+     */
+    #forgetPendingAtlClick(atlContent) {
+        const position = this.#pendingAtlClicks.indexOf(atlContent);
+
+        if (position !== -1) {
+            this.#pendingAtlClicks.splice(position, 1);
+        }
+    }
+
+    /**
+     * Confirms that the items from the most recent unacknowledged "add to list" ad
+     * click reached the user's list, which is what reports that ad's interaction.
+     *
+     * DEPRECATED: use the handle passed as the second argument to
+     * onAddItemsTriggered instead. This method has no way to say which click is
+     * being confirmed, so it resolves the oldest one still outstanding. With zones
+     * serving independently a user can click two add to list ads before the first
+     * is confirmed, and a host that then confirms them out of order reports each
+     * interaction against the wrong ad.
+     * @deprecated Call acknowledge() on the handle from onAddItemsTriggered.
      */
     acknowledgeAdded() {
-        if (this.lastSelectedATL !== undefined) {
-            // Sent with keepalive for the same reason the click itself is: this is
-            // the deferred half of that click, reported once the host confirms the
-            // items reached the list, and the host may well navigate on the back of
-            // the same user action.
-            this.#triggerReportAdEvent(
-                this.lastSelectedATL,
-                this.#ReportedEventType.INTERACTION,
-                undefined,
-                true,
-            );
+        const oldestPendingClick = this.#pendingAtlClicks[0];
 
-            this.lastSelectedATL = undefined;
-        } else {
+        if (!oldestPendingClick) {
             console.error(
                 "An ATL ad must be selected by the user in order to acknowledge item being added to list.",
             );
+
+            return;
         }
+
+        oldestPendingClick.acknowledge();
     }
 
     /**
@@ -784,6 +873,8 @@ class AdadaptedJsSdk {
         }
 
         this.zones = {};
+
+        this.#discardPendingAtlClicks();
 
         // An open popover outlives the SDK otherwise, leaving the host page under a
         // full screen overlay it cannot dismiss and with body scrolling disabled.
@@ -1415,6 +1506,8 @@ class AdadaptedJsSdk {
         }
 
         this.zones = {};
+
+        this.#discardPendingAtlClicks();
 
         if (this.intersectionObserver) {
             this.intersectionObserver.disconnect();
@@ -2655,18 +2748,31 @@ class AdadaptedJsSdk {
                         // callback: this one is invoked from a message handler, so
                         // a host that throws would otherwise take out the rest of
                         // the popover's handling with it.
-                        this.#invokeClientCallback("onAddItemsTriggered", [
-                            {
-                                tracking_id: trackingId,
-                                product_title: productTitle,
-                                product_brand: productBrand,
-                                product_category: productCategory,
-                                product_barcode: productBarcode,
-                                product_sku: retailerSku,
-                                product_discount: productDiscount,
-                                product_image: productImage,
-                            },
-                        ]);
+                        //
+                        // The handle is marked already reported. Opening this
+                        // popover was itself the interaction and it was reported at
+                        // that moment, so acknowledging these items must not report
+                        // a second one for the same click. The host still gets a
+                        // handle rather than nothing, because it has no way to tell
+                        // this path apart from the other one - and before it had
+                        // one, acknowledging here resolved whichever unrelated
+                        // click happened to be outstanding instead.
+                        this.#invokeClientCallback(
+                            "onAddItemsTriggered",
+                            [
+                                {
+                                    tracking_id: trackingId,
+                                    product_title: productTitle,
+                                    product_brand: productBrand,
+                                    product_category: productCategory,
+                                    product_barcode: productBarcode,
+                                    product_sku: retailerSku,
+                                    product_discount: productDiscount,
+                                    product_image: productImage,
+                                },
+                            ],
+                            this.#createAtlContent(currentAd, true),
+                        );
                     },
                 };
             }
@@ -2720,10 +2826,10 @@ class AdadaptedJsSdk {
         ) {
             wasHandled = true;
 
-            this.lastSelectedATL = { ...currentAd };
             this.#invokeClientCallback(
                 "onAddItemsTriggered",
                 currentAd.payload.detailed_list_items,
+                this.#createAtlContent(currentAd),
             );
         }
 
@@ -3529,6 +3635,30 @@ class AdadaptedJsSdk {
      * bookkeeping, and getSessionId() is the supported way to observe a session.
      */
     #sessionCreatedAt;
+
+    /**
+     * Add to list clicks the host has been handed but has not yet confirmed
+     * reached a list, oldest first.
+     *
+     * A list rather than a single slot, and a list rather than one entry per zone,
+     * because what has to be told apart is the click - with zones serving
+     * independently, a user can click one zone's add to list ad and then another's
+     * before the host has finished with the first.
+     */
+    #pendingAtlClicks = [];
+
+    /**
+     * How many unconfirmed add to list clicks to keep. A host that never confirms
+     * would otherwise grow this list for the life of the page. Far more than any
+     * real user gets through before the first confirmation lands.
+     */
+    #MAX_PENDING_ATL_CLICKS = 25;
+
+    /**
+     * Bumped whenever the pending clicks are abandoned, which is what tells a
+     * handle the host is still holding that the SDK it belongs to has gone.
+     */
+    #atlGeneration = 0;
 
     #SESSION_LIFETIME_MS = 30 * 60 * 1000;
 
