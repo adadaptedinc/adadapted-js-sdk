@@ -410,7 +410,9 @@ export const App: FC = (): ReactElement => {
             // Acknowledged through the handle from onAddItemsTriggered rather than
             // jsSdk.acknowledgeAdded(), which cannot tell which click it is
             // confirming. Absent when the items did not come from an ad click, and
-            // then there is no interaction to report at all.
+            // then there is no interaction to report at all. Calling it when
+            // requiresAcknowledgement is false is harmless - it reports nothing and
+            // returns false - so most apps can call it unconditionally as here.
             atlContent?.acknowledge();
             jsSdk.reportItemsAddedToList(itemNameReportList, "Shopping List");
         }
@@ -468,7 +470,9 @@ export const App: FC = (): ReactElement => {
             // Acknowledged through the handle from onAddItemsTriggered rather than
             // jsSdk.acknowledgeAdded(), which cannot tell which click it is
             // confirming. Absent when the items did not come from an ad click, and
-            // then there is no interaction to report at all.
+            // then there is no interaction to report at all. Calling it when
+            // requiresAcknowledgement is false is harmless - it reports nothing and
+            // returns false - so most apps can call it unconditionally as here.
             atlContent?.acknowledge();
             jsSdk.reportItemsAddedToCart(itemNameReportList, "Shopping Cart");
         }

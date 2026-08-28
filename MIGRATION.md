@@ -35,6 +35,9 @@ for those items resolves some _unrelated_ outstanding click instead — reportin
 interaction the user never confirmed, while the popover's own add confirms nothing.
 The handle has neither problem: it is bound to the click it came from, and the one
 handed over for a popover add is inert because that interaction is already counted.
+That case is visible rather than silent — such a handle reports
+`requiresAcknowledgement: false`, and acknowledging it returns `false`. A host that
+does not need to tell them apart can call `acknowledge()` unconditionally.
 
 **Use the handle passed to `onAddItemsTriggered` instead.** It is bound to the click
 it came from and cannot be misattributed:
@@ -47,8 +50,9 @@ onAddItemsTriggered: (items, adContent) => {
 };
 ```
 
-`acknowledge()` is safe to call more than once — only the first call reports
-anything — and safe to call late. A handle is abandoned when the SDK is torn down by
+`acknowledge()` returns `true` when it reported the interaction and `false` when
+there was nothing to report. It is safe to call more than once — only the first call
+reports anything — and safe to call late. A handle is abandoned when the SDK is torn down by
 `unmount()` **or** re-initialized by a second `initialize()`, and acknowledging one
 after that does nothing rather than reporting against whatever replaced it.
 
@@ -67,6 +71,7 @@ onAddItemsTriggered: (items) => {
 | Before                       | After                                   |
 | ---------------------------- | --------------------------------------- |
 | `onAdsRetrieved(map)`        | `onAdRetrieved(zoneId, hasAd)`          |
+| `onAdZonesRefreshed()`       | `onAdZoneRefreshed(zoneId)`             |
 | `onAddItemsTriggered(items)` | `onAddItemsTriggered(items, adContent)` |
 | `Ad.ad_id`                   | `Ad.id`                                 |
 
@@ -152,7 +157,9 @@ compiling and then behaves differently.
     keying on them would split one shopper browsing several stores into several
     sessions.
 
-- **`onAdZonesRefreshed` fires per zone, per rotation**, not once per bulk refresh.
+- **`onAdZoneRefreshed` fires per zone, per rotation**, not once per bulk refresh,
+  which is why it was renamed to the singular and now names the zone that changed.
+  It is still not called for a zone's first ad, only for the ones replacing it.
 - **`scrollContainerId` is now the `IntersectionObserver` root**, not a scroll
   listener target. It must be an **ancestor of every placement element** — a zone
   outside it never counts as visible, so it records no impressions and never

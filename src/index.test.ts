@@ -563,12 +563,13 @@ describe("AdadaptedJsSdk", () => {
             });
             await flushPromises();
 
-            expect(() => testSdk.onAdZonesRefreshed()).not.toThrow();
+            expect(() => testSdk.onAdZoneRefreshed("1")).not.toThrow();
             expect(() =>
                 testSdk.onAddItemsTriggered([], {
                     adId: "",
                     zoneId: "",
-                    acknowledge: () => {},
+                    requiresAcknowledgement: false,
+                    acknowledge: () => false,
                 }),
             ).not.toThrow();
             expect(() =>
@@ -580,7 +581,7 @@ describe("AdadaptedJsSdk", () => {
 
         it("adopts each callback the client supplies", async () => {
             const callbacks = {
-                onAdZonesRefreshed: jest.fn(),
+                onAdZoneRefreshed: jest.fn(),
                 onAddItemsTriggered: jest.fn(),
                 onExternalContentAdClicked: jest.fn(),
                 onPayloadsAvailable: jest.fn(),
@@ -2622,6 +2623,53 @@ describe("AdadaptedJsSdk", () => {
             );
         });
 
+        it("says whether acknowledging a click will report anything", async () => {
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            expect(handles[0].requiresAcknowledgement).toBe(true);
+
+            // True the first time because it reported, false afterwards because
+            // there was nothing left to report.
+            expect(handles[0].acknowledge()).toBe(true);
+            expect(handles[0].acknowledge()).toBe(false);
+
+            await flushPromises();
+
+            expect(getReportedAdEvents(fetchMock, "interaction")).toHaveLength(
+                1,
+            );
+        });
+
+        it("says a handle is spent once the SDK it belongs to has gone", async () => {
+            const handles: any[] = [];
+            const testSdk = sdk!;
+
+            await testSdk.initialize({
+                ...baseTestProps,
+                onAddItemsTriggered: (_items, adContent) => {
+                    handles.push(adContent);
+                },
+            });
+            await setZonesOnScreen(true);
+
+            fireEvent.click(document.querySelector("#zone1 .clickable-area")!);
+
+            testSdk.unmount();
+
+            expect(handles[0].acknowledge()).toBe(false);
+        });
+
         it("hands the popover's own add-to-list an inert handle", async () => {
             // The bridge only runs when the creative has already put an AdAdapted
             // object on the iframe, which jsdom cannot do on its own. Stubbing the
@@ -2674,7 +2722,10 @@ describe("AdadaptedJsSdk", () => {
 
                 expect(handles).toHaveLength(1);
 
-                handles[0].acknowledge();
+                // Flagged, so a host can tell this apart from a click it still owes
+                // a confirmation for.
+                expect(handles[0].requiresAcknowledgement).toBe(false);
+                expect(handles[0].acknowledge()).toBe(false);
 
                 await flushPromises();
 
@@ -3835,11 +3886,11 @@ describe("AdadaptedJsSdk", () => {
             }
         });
 
-        it("fires onAdZonesRefreshed per rotation, but not for a zone's first ad", async () => {
+        it("fires onAdZoneRefreshed per rotation, but not for a zone's first ad", async () => {
             jest.useFakeTimers({ doNotFake: ["setImmediate"] });
 
             try {
-                const onAdZonesRefreshed = jest.fn();
+                const onAdZoneRefreshed = jest.fn();
 
                 fetchMock = mockFetch({
                     adsByZoneId: { [TEST_ZONE_1_ID]: testAtlAd },
@@ -3850,22 +3901,26 @@ describe("AdadaptedJsSdk", () => {
                 await testSdk.initialize({
                     ...baseTestProps,
                     zonePlacements: { [TEST_ZONE_1_ID]: "zone1" },
-                    onAdZonesRefreshed,
+                    onAdZoneRefreshed,
                 });
                 await setZonesOnScreen(true);
 
                 // The first ad is a first display, not a refresh.
-                expect(onAdZonesRefreshed).not.toHaveBeenCalled();
+                expect(onAdZoneRefreshed).not.toHaveBeenCalled();
 
                 jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
                 await flushPromises();
 
-                expect(onAdZonesRefreshed).toHaveBeenCalledTimes(1);
+                expect(onAdZoneRefreshed).toHaveBeenCalledTimes(1);
 
                 jest.advanceTimersByTime(testAtlAd.refresh_time * 1000);
                 await flushPromises();
 
-                expect(onAdZonesRefreshed).toHaveBeenCalledTimes(2);
+                expect(onAdZoneRefreshed).toHaveBeenCalledTimes(2);
+
+                // Told which zone changed. Three zones rotating on their own
+                // schedules are otherwise indistinguishable to the host.
+                expect(onAdZoneRefreshed).toHaveBeenCalledWith(TEST_ZONE_1_ID);
             } finally {
                 jest.useRealTimers();
             }

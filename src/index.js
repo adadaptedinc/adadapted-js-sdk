@@ -45,7 +45,7 @@ class AdadaptedJsSdk {
         /**
          * Triggered when the ad zone has refreshed.
          */
-        this.onAdZonesRefreshed = () => {
+        this.onAdZoneRefreshed = () => {
             // Defaulting to empty method.
         };
         /**
@@ -179,10 +179,10 @@ class AdadaptedJsSdk {
                     this.listManagerApiEnv = this.#ListManagerApiEnv.Prod;
                 }
 
-                // If the callback for onAdZonesRefreshed was provided, set it
+                // If the callback for onAdZoneRefreshed was provided, set it
                 // globally for use when the method needs to be triggered.
-                if (props.onAdZonesRefreshed) {
-                    this.onAdZonesRefreshed = props.onAdZonesRefreshed;
+                if (props.onAdZoneRefreshed) {
+                    this.onAdZoneRefreshed = props.onAdZoneRefreshed;
                 }
 
                 // If the callback for onAddItemsTriggered was provided, set it
@@ -559,6 +559,12 @@ class AdadaptedJsSdk {
         const atlContent = {
             adId: reportedAd.id,
             zoneId: reportedAd.zone_id,
+            // Says up front whether confirming this one will do anything. Items
+            // added from inside an ad popover arrive here too, and that click was
+            // already counted when the popover opened, so there is nothing left to
+            // confirm. Without this the host cannot tell the two apart and has no
+            // way to know its acknowledgement was a no-op.
+            requiresAcknowledgement: !isHandled,
             acknowledge: () => {
                 // Guarded so a host that confirms twice reports one interaction,
                 // the way AdContent.isHandled does on the native SDKs. The
@@ -566,7 +572,7 @@ class AdadaptedJsSdk {
                 // still be holding this handle long after the click stopped meaning
                 // anything.
                 if (isHandled || createdInGeneration !== this.#atlGeneration) {
-                    return;
+                    return false;
                 }
 
                 isHandled = true;
@@ -582,6 +588,8 @@ class AdadaptedJsSdk {
                     undefined,
                     true,
                 );
+
+                return true;
             },
         };
 
@@ -2122,7 +2130,7 @@ class AdadaptedJsSdk {
 
         if (wasAlreadyDisplayed) {
             // Call the user defined callback indicating the zone's ad has changed.
-            this.#invokeClientCallback("onAdZonesRefreshed");
+            this.#invokeClientCallback("onAdZoneRefreshed", zone.zoneId);
         }
     }
 

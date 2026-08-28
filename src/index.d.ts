@@ -22,7 +22,7 @@ declare class AdadaptedJsSdk {
     scrollContainerId: string | undefined;
     deviceLocale: string | undefined;
     params: { [key: string]: any } | undefined;
-    onAdZonesRefreshed: () => void;
+    onAdZoneRefreshed: (zoneId: string) => void;
     onAddItemsTriggered: (
         items: AdadaptedJsSdk.DetailedListItem[],
         adContent: AdadaptedJsSdk.AtlAdContent,
@@ -242,10 +242,12 @@ declare namespace AdadaptedJsSdk {
          */
         params?: InitializeParams;
         /**
-         * Callback that gets triggered when the session/zones/ads data
-         * gets refreshed and is now available for reference.
+         * Callback that gets triggered when a zone swaps the ad it is showing for
+         * a new one. Not called for a zone's first ad, only for the ones that
+         * replace it.
+         * @param zoneId - The ad zone whose ad changed.
          */
-        onAdZonesRefreshed?(): void;
+        onAdZoneRefreshed?(zoneId: string): void;
         /**
          * Callback that gets triggered when "add to list" or "add to cart" item/items are clicked.
          * @param items - The array of items to add.
@@ -436,13 +438,24 @@ declare namespace AdadaptedJsSdk {
          */
         zoneId: string;
         /**
+         * Whether acknowledging this click will report anything.
+         *
+         * False for items added from inside an ad popover: opening the popover was
+         * itself the interaction and it was reported then, so there is nothing left
+         * to confirm. Acknowledging one of those is harmless, it simply does
+         * nothing. Check this if the host needs to tell the two apart.
+         */
+        requiresAcknowledgement: boolean;
+        /**
          * Reports the ad's interaction, confirming the items reached the list.
          *
-         * Safe to call more than once - only the first call reports anything. Also
-         * safe to call late, including after the SDK has been unmounted, in which
-         * case it does nothing.
+         * Safe to call more than once, and safe to call late - including after the
+         * SDK has been unmounted or re-initialized, when it does nothing.
+         * @returns true if this call reported the interaction, false if there was
+         * nothing to report - already acknowledged, already counted at the moment
+         * the popover opened, or belonging to an SDK that has since gone away.
          */
-        acknowledge(): void;
+        acknowledge(): boolean;
     }
 
     /**
