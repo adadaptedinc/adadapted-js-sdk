@@ -2367,6 +2367,72 @@ describe("AdadaptedJsSdk", () => {
             expect(testSdk.zones[TEST_ZONE_1_ID].timerRunning).toBe(false);
         });
 
+        it("reports client actions with keepalive, but not the calls that need a response", async () => {
+            const testSdk = sdk!;
+
+            await testSdk.initialize(baseTestProps);
+            await flushPromises();
+
+            // initialize() is what issues the retrieve and pickup calls, and those
+            // are half of what this test is about, so they are kept aside before
+            // the mock is cleared for the client actions below.
+            const initCalls = [...fetchMock.mock.calls];
+
+            fetchMock.mockClear();
+
+            // Every one of these is a user action that is routinely the last thing
+            // someone does before closing the tab, and none of them reads its
+            // response.
+            testSdk.reportItemsAddedToList(["Milk"], "My list");
+            testSdk.reportItemsCrossedOffList(["Milk"], "My list");
+            testSdk.reportItemsDeletedFromList(["Milk"], "My list");
+            testSdk.performKeywordSearch("mil");
+            testSdk.reportRecipeLoaded("recipe-1", [TEST_ZONE_1_ID]);
+
+            await flushPromises();
+
+            const reporting = fetchMock.mock.calls.filter(([url]) => {
+                const asString = String(url);
+
+                return (
+                    asString.includes("/events") ||
+                    asString.includes("/v/1/tracking")
+                );
+            });
+
+            expect(reporting.length).toBeGreaterThan(0);
+
+            for (const [url, init] of reporting) {
+                expect({
+                    url: String(url),
+                    keepalive:
+                        (init as { keepalive?: boolean }).keepalive === true,
+                }).toEqual({ url: String(url), keepalive: true });
+            }
+
+            // The retrieve and pickup calls are deliberately excluded: they exist
+            // to deliver a response, which a request the browser is allowed to
+            // outlive the document cannot be relied on to return.
+            const fetching = initCalls.filter(([url]) => {
+                const asString = String(url);
+
+                return (
+                    asString.includes("/retrieve") ||
+                    asString.includes("/v/1/pickup")
+                );
+            });
+
+            expect(fetching.length).toBeGreaterThan(0);
+
+            for (const [url, init] of fetching) {
+                expect({
+                    url: String(url),
+                    keepalive:
+                        (init as { keepalive?: boolean }).keepalive === true,
+                }).toEqual({ url: String(url), keepalive: false });
+            }
+        });
+
         it("sends SESSION_BACKGROUNDED with keepalive", async () => {
             const testSdk = sdk!;
 

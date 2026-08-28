@@ -267,6 +267,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -363,6 +368,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.apiEnv}/v/1.0.0/intercept/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -447,6 +457,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.apiEnv}/v/1.0.0/intercept/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -493,6 +508,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.apiEnv}/v/1.0.0/intercept/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -647,6 +667,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -2188,6 +2213,11 @@ class AdadaptedJsSdk {
         this.#fetchApiRequest({
             method: "POST",
             url: `${this.payloadApiEnv}/v/1/tracking`,
+            // Reported and not read: the response is unused, and the user
+            // action that triggers it is routinely the last thing they do
+            // before closing the tab. Without keepalive that request is
+            // cancelled with the document and the signal is lost silently.
+            keepalive: true,
             headers: [
                 {
                     name: "Content-Type",
@@ -2634,6 +2664,11 @@ class AdadaptedJsSdk {
         this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            // Reported and not read: the response is unused, and the user
+            // action that triggers it is routinely the last thing they do
+            // before closing the tab. Without keepalive that request is
+            // cancelled with the document and the signal is lost silently.
+            keepalive: true,
             headers: [
                 {
                     name: "accept",
@@ -2674,6 +2709,11 @@ class AdadaptedJsSdk {
         this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            // Reported and not read: the response is unused, and the user
+            // action that triggers it is routinely the last thing they do
+            // before closing the tab. Without keepalive that request is
+            // cancelled with the document and the signal is lost silently.
+            keepalive: true,
             headers: [
                 {
                     name: "accept",
