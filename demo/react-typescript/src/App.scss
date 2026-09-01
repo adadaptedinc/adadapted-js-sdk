@@ -62,14 +62,21 @@ body {
         flex-direction: row;
         flex: 1 1 auto;
 
+        .stacked-view {
+            display: flex;
+            flex-direction: column;
+            flex: 0 0 auto;
+            width: 540px;
+        }
+
         .search-view {
             display: flex;
             flex-direction: column;
             flex: 0 0 auto;
-            overflow-y: auto;
             overflow-x: hidden;
             padding: 20px;
-            width: 500px;
+            width: 100%;
+            box-sizing: border-box;
 
             .keyword-intercept-search {
                 display: flex;
@@ -144,10 +151,10 @@ body {
             flex-direction: column;
             align-items: center;
             flex: 0 0 auto;
-            overflow-y: auto;
             overflow-x: hidden;
             padding: 20px;
-            width: 500px;
+            width: 100%;
+            box-sizing: border-box;
 
             .list-header {
                 display: flex;
@@ -293,6 +300,14 @@ body {
                 border: 1px solid #00000033;
                 margin-bottom: 20px;
             }
+        }
+
+        // Stacked under the shopping list, so these zones live in a different area of
+        // the screen than the first zone and scroll separately from it.
+        .secondary-ad-units {
+            width: 100%;
+            box-sizing: border-box;
+            border-top: 1px solid #00000033;
         }
 
         .view-gutter {

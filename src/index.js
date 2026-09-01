@@ -17,30 +17,35 @@ class AdadaptedJsSdk {
         this.enableKeywordIntercept = false;
         this.zonePlacements = undefined;
         this.apiEnv = this.#ApiEnv.Prod;
-        this.apiEnvString = "prod";
         this.listManagerApiEnv = this.#ListManagerApiEnv.Prod;
         this.payloadApiEnv = this.#PayloadApiEnv.Prod;
         this.deviceOs = undefined;
         this.sessionId = undefined;
-        this.sessionInfo = undefined;
-        this.adZones = undefined;
-        this.lastSelectedATL = undefined;
-        this.refreshAdZonesTimer = undefined;
-        this.refreshSessionTimer = undefined;
+        this.sessionLastActiveAt = undefined;
+        this.sessionPersistedAt = undefined;
+        this.sessionIsBackgrounded = false;
         this.keywordIntercepts = undefined;
         this.keywordInterceptSearchValue = "";
-        this.cycleAdTimers = {};
         this.initialBodyOverflowStyle = document.body.style.overflow;
         this.scrollContainerId = undefined;
-        this.scrollEventAbortController = undefined;
-        this.adZoneCurrentAdImpressionTracker = {};
         this.params = undefined;
         this.deviceLocale = undefined;
 
         /**
+         * Map of {zone ID -> zone state}. Each entry owns its own ad request,
+         * refresh countdown, and impression pairing, independent of every other
+         * zone. This replaces the previous single list of zones that all shared
+         * one global refresh timer.
+         */
+        this.zones = {};
+
+        this.intersectionObserver = undefined;
+        this.documentEventAbortController = undefined;
+
+        /**
          * Triggered when the ad zone has refreshed.
          */
-        this.onAdZonesRefreshed = () => {
+        this.onAdZoneRefreshed = () => {
             // Defaulting to empty method.
         };
         /**
@@ -64,7 +69,7 @@ class AdadaptedJsSdk {
         /**
          * Triggered when ads have been retrieved.
          */
-        this.onAdsRetrieved = () => {
+        this.onAdRetrieved = () => {
             // Defaulting to empty method.
         };
     }
@@ -149,14 +154,18 @@ class AdadaptedJsSdk {
                 this.enablePayloads = props.enablePayloads ? true : false;
 
                 // Set whether keyword intercepts are enabled.
-                this.enableKeywordIntercept = props.enableKeywordIntercept;
+                this.enableKeywordIntercept = props.enableKeywordIntercept
+                    ? true
+                    : false;
 
                 // Set the zone placements provided by the client.
                 this.zonePlacements = props.zonePlacements;
 
                 // Set the API environments based on the provided override value.
                 // If the apiEnv value is not provided, production will be used as default.
-                this.apiEnvString = props.apiEnv;
+                // NOTE: This must normalize to a real value rather than pass props.apiEnv
+                //       through, because it is part of the session storage key.
+                this.#apiEnvString = props.apiEnv === "dev" ? "dev" : "prod";
 
                 this.deviceLocale = props.deviceLocale;
 
@@ -170,10 +179,10 @@ class AdadaptedJsSdk {
                     this.listManagerApiEnv = this.#ListManagerApiEnv.Prod;
                 }
 
-                // If the callback for onAdZonesRefreshed was provided, set it
+                // If the callback for onAdZoneRefreshed was provided, set it
                 // globally for use when the method needs to be triggered.
-                if (props.onAdZonesRefreshed) {
-                    this.onAdZonesRefreshed = props.onAdZonesRefreshed;
+                if (props.onAdZoneRefreshed) {
+                    this.onAdZoneRefreshed = props.onAdZoneRefreshed;
                 }
 
                 // If the callback for onAddItemsTriggered was provided, set it
@@ -195,16 +204,17 @@ class AdadaptedJsSdk {
                     this.onPayloadsAvailable = props.onPayloadsAvailable;
                 }
 
-                // If the callback for onAdsRetrieved was provided, set it
+                // If the callback for onAdRetrieved was provided, set it
                 // globally for use when the method needs to be triggered.
-                if (props.onAdsRetrieved) {
-                    this.onAdsRetrieved = props.onAdsRetrieved;
+                if (props.onAdRetrieved) {
+                    this.onAdRetrieved = props.onAdRetrieved;
                 }
 
                 this.deviceOs = this.#getOperatingSystem();
 
-                // Initialize the session.
-                this.#initializeSession()
+                // Start the SDK. There is no session request to make anymore - the
+                // session ID is generated client side and persisted to local storage.
+                this.#startSdk()
                     .then(() => {
                         resolve();
                     })
@@ -247,6 +257,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -257,15 +272,7 @@ class AdadaptedJsSdk {
                         value: this.apiKey,
                     },
                 ],
-                requestPayload: {
-                    session_id: this.sessionId,
-                    app_id: this.apiKey,
-                    udid: this.advertiserId,
-                    events: finalEventsList,
-                    sdk_version: packageJson.version,
-                    bundle_id: this.bundleId,
-                    bundle_version: this.bundleVersion,
-                },
+                requestPayload: this.#buildSdkEventRequest(finalEventsList),
                 onError: () => {
                     console.error(
                         "An error occurred while reporting the recipe load event.",
@@ -297,7 +304,7 @@ class AdadaptedJsSdk {
         } else if (
             searchTerm &&
             searchTerm.trim() &&
-            searchTerm.trim().length >= this.keywordIntercepts.min_match_length
+            searchTerm.trim().length >= this.#MIN_KEYWORD_MATCH_LENGTH
         ) {
             searchTerm = searchTerm.trim();
 
@@ -350,7 +357,12 @@ class AdadaptedJsSdk {
             // all terms that matched the users search.
             this.#fetchApiRequest({
                 method: "POST",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
+                url: `${this.apiEnv}/v/1.0.0/intercept/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -364,7 +376,7 @@ class AdadaptedJsSdk {
                 requestPayload: {
                     app_id: this.apiKey,
                     udid: this.advertiserId,
-                    session_id: this.sessionId,
+                    session_id: this.#ensureSession(),
                     sdk_version: packageJson.version,
                     events: finalEventsList,
                 },
@@ -434,7 +446,12 @@ class AdadaptedJsSdk {
 
             this.#fetchApiRequest({
                 method: "POST",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
+                url: `${this.apiEnv}/v/1.0.0/intercept/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -448,7 +465,7 @@ class AdadaptedJsSdk {
                 requestPayload: {
                     app_id: this.apiKey,
                     udid: this.advertiserId,
-                    session_id: this.sessionId,
+                    session_id: this.#ensureSession(),
                     sdk_version: packageJson.version,
                     events: termEvents,
                 },
@@ -480,7 +497,12 @@ class AdadaptedJsSdk {
         } else {
             this.#fetchApiRequest({
                 method: "POST",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/events`,
+                url: `${this.apiEnv}/v/1.0.0/intercept/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -494,7 +516,7 @@ class AdadaptedJsSdk {
                 requestPayload: {
                     app_id: this.apiKey,
                     udid: this.advertiserId,
-                    session_id: this.sessionId,
+                    session_id: this.#ensureSession(),
                     sdk_version: packageJson.version,
                     events: [
                         {
@@ -519,23 +541,127 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
-     * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
-     * NOTE: This method is not optional. The client must trigger this method.
+     * Builds the handle handed to the host alongside an "add to list" ad's items,
+     * so the acknowledgement can be tied back to the click that produced it.
+     *
+     * The ad is captured here rather than looked up later because the zone rotates
+     * on to its next ad as soon as the click is handled, so by the time the host
+     * confirms, the zone is showing something else entirely.
+     * @param {object} ad - The ad the items came from.
+     * @param {boolean} isAlreadyReported - True if the interaction for this ad has already been reported, so acknowledging must not report a second one.
+     * @returns the handle to hand to the client.
+     */
+    #createAtlContent(ad, isAlreadyReported) {
+        const reportedAd = { ...ad };
+        const createdInGeneration = this.#atlGeneration;
+        let isHandled = isAlreadyReported === true;
+
+        const atlContent = {
+            adId: reportedAd.id,
+            zoneId: reportedAd.zone_id,
+            // Says up front whether confirming this one will do anything. Items
+            // added from inside an ad popover arrive here too, and that click was
+            // already counted when the popover opened, so there is nothing left to
+            // confirm. Without this the host cannot tell the two apart and has no
+            // way to know its acknowledgement was a no-op.
+            requiresAcknowledgement: !isHandled,
+            acknowledge: () => {
+                // Guarded so a host that confirms twice reports one interaction,
+                // the way AdContent.isHandled does on the native SDKs. The
+                // generation check is the same idea across a teardown: the host may
+                // still be holding this handle long after the click stopped meaning
+                // anything.
+                if (isHandled || createdInGeneration !== this.#atlGeneration) {
+                    return false;
+                }
+
+                isHandled = true;
+
+                this.#forgetPendingAtlClick(atlContent);
+
+                // Sent with keepalive for the same reason the click itself is: this
+                // is the deferred half of that click, and the host may well navigate
+                // on the back of the same user action.
+                this.#triggerReportAdEvent(
+                    reportedAd,
+                    this.#ReportedEventType.INTERACTION,
+                    undefined,
+                    true,
+                );
+
+                return true;
+            },
+        };
+
+        // An interaction already counted is not pending anything, so it is not
+        // queued - acknowledgeAdded() must never find it and report a duplicate.
+        if (!isAlreadyReported) {
+            this.#pendingAtlClicks.push(atlContent);
+
+            while (
+                this.#pendingAtlClicks.length > this.#MAX_PENDING_ATL_CLICKS
+            ) {
+                const dropped = this.#pendingAtlClicks.shift();
+
+                console.warn(
+                    `The "add to list" click on ad "${dropped.adId}" was never acknowledged and has been dropped.`,
+                );
+            }
+        }
+
+        return atlContent;
+    }
+
+    /**
+     * Abandons every click still waiting on the host.
+     *
+     * The generation is bumped rather than the handles being altered, because the
+     * host is holding those handles. A confirmation arriving after teardown would
+     * otherwise fire a request off the back of an SDK that no longer exists, and
+     * one arriving after a second initialize() would report against the session
+     * that replaced the one the click belonged to.
+     */
+    #discardPendingAtlClicks() {
+        this.#atlGeneration = this.#atlGeneration + 1;
+        this.#pendingAtlClicks = [];
+    }
+
+    /**
+     * Drops a click from the pending list, however it came to be resolved.
+     * @param {object} atlContent - The handle to forget.
+     */
+    #forgetPendingAtlClick(atlContent) {
+        const position = this.#pendingAtlClicks.indexOf(atlContent);
+
+        if (position !== -1) {
+            this.#pendingAtlClicks.splice(position, 1);
+        }
+    }
+
+    /**
+     * Confirms that the items from the oldest unacknowledged "add to list" ad click
+     * reached the user's list, which is what reports that ad's interaction.
+     *
+     * DEPRECATED: use the handle passed as the second argument to
+     * onAddItemsTriggered instead. This method has no way to say which click is
+     * being confirmed, so it resolves the oldest one still outstanding. With zones
+     * serving independently a user can click two add to list ads before the first
+     * is confirmed, and a host that then confirms them out of order reports each
+     * interaction against the wrong ad.
+     * @deprecated Call acknowledge() on the handle from onAddItemsTriggered.
      */
     acknowledgeAdded() {
-        if (this.lastSelectedATL !== undefined) {
-            this.#triggerReportAdEvent(
-                this.lastSelectedATL,
-                this.#ReportedEventType.INTERACTION,
-            );
+        const oldestPendingClick = this.#pendingAtlClicks[0];
 
-            this.lastSelectedATL = undefined;
-        } else {
+        if (!oldestPendingClick) {
             console.error(
                 "An ATL ad must be selected by the user in order to acknowledge item being added to list.",
             );
+
+            return;
         }
+
+        oldestPendingClick.acknowledge();
     }
 
     /**
@@ -635,6 +761,11 @@ class AdadaptedJsSdk {
             this.#fetchApiRequest({
                 method: "POST",
                 url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+                // Reported and not read: the response is unused, and the user
+                // action that triggers it is routinely the last thing they do
+                // before closing the tab. Without keepalive that request is
+                // cancelled with the document and the signal is lost silently.
+                keepalive: true,
                 headers: [
                     {
                         name: "accept",
@@ -701,8 +832,8 @@ class AdadaptedJsSdk {
                 storeId: newStoreId,
             };
 
-            // Refresh the ad zones so the new store ID takes affect.
-            this.#refreshAdZones(true);
+            // Refresh every zone so the new store ID takes affect.
+            this.#refreshZones();
         } else {
             console.error(
                 "The store ID must be provided in order to update the SDK to use it.",
@@ -728,8 +859,9 @@ class AdadaptedJsSdk {
             // Track the the recipe load.
             this.reportRecipeLoaded(newRecipeContextId, newRecipContextZoneIds);
 
-            // Refresh the ad zones so the new recipe context ID takes affect.
-            this.#refreshAdZones(false);
+            // Refresh only the zones the new recipe context applies to, so the
+            // context ID takes affect for them.
+            this.#refreshZones(newRecipContextZoneIds);
         } else {
             console.error(
                 "The recipe context ID must be provided in order to update the SDK to use it.",
@@ -742,410 +874,1628 @@ class AdadaptedJsSdk {
      * finished with the SDK to ensure you don't experience memory leaks.
      */
     unmount() {
-        if (this.adZones && this.adZones.length) {
-            for (const adZone of this.adZones) {
-                if (this.cycleAdTimers[adZone.zoneId]) {
-                    clearTimeout(this.cycleAdTimers[adZone.zoneId]);
-                    this.cycleAdTimers[adZone.zoneId] = undefined;
-                }
-            }
+        // Close out every zone before tearing down the listeners, so the
+        // "impression_end" and "zone_unmounted" events still get reported.
+        for (const zoneId of Object.keys(this.zones)) {
+            this.#unmountZone(this.zones[zoneId]);
         }
 
-        if (this.refreshAdZonesTimer) {
-            clearTimeout(this.refreshAdZonesTimer);
-            this.refreshAdZonesTimer = undefined;
+        this.zones = {};
+
+        this.#discardPendingAtlClicks();
+
+        // An open popover outlives the SDK otherwise, leaving the host page under a
+        // full screen overlay it cannot dismiss and with body scrolling disabled.
+        const popoverContainer = document.getElementById(
+            "adContentsPopoverContainer",
+        );
+
+        if (popoverContainer && popoverContainer.parentNode) {
+            popoverContainer.parentNode.removeChild(popoverContainer);
         }
 
-        if (this.refreshSessionTimer) {
-            clearTimeout(this.refreshSessionTimer);
-            this.refreshSessionTimer = undefined;
+        document.body.style.overflow = this.initialBodyOverflowStyle;
+
+        if (this.intersectionObserver) {
+            this.intersectionObserver.disconnect();
+            this.intersectionObserver = undefined;
+        }
+
+        // Removes the visibilitychange and pagehide listeners in one shot.
+        if (this.documentEventAbortController) {
+            this.documentEventAbortController.abort();
+            this.documentEventAbortController = undefined;
         }
     }
 
     /**
-     * Initializes the session with the API.
+     * Starts the SDK up. Resolves the session, wires up the document level
+     * listeners, mounts the ad zones, and kicks off the keyword intercept and
+     * payload requests.
+     * @returns a Promise of void.
      */
-    #initializeSession() {
-        return new Promise((resolve, reject) => {
-            this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
-                let createNewSession = true;
-                let parsedExistingSession;
-                const sessionValue = localStorage.getItem(
-                    `aa-session-${this.apiEnvString}-${hashedApiKey}`,
+    #startSdk() {
+        return Promise.all([
+            this.#getHashSHA256(this.apiKey),
+            this.#getHashSHA256(`${this.apiKey}::${this.advertiserId}`),
+        ]).then(([hashedApiKey, hashedSessionOwner]) => {
+            this.#hashedSessionOwner = hashedSessionOwner;
+
+            // Drop any session cached by an older version of the SDK. The oldest
+            // payload carried server issued zones and ads and does not parse as the
+            // current shape at all; the one after it parses fine but was keyed on
+            // the app alone, so it belongs to whoever used this browser last rather
+            // than to the user signing in now.
+            //
+            // Only these two exact keys are removed, never a sweep of everything
+            // starting "aa-session-". Another user's current session lives under
+            // this same prefix, and clearing it would recreate on a shared device
+            // the very problem the owner hash is here to fix.
+            try {
+                localStorage.removeItem(
+                    `aa-session-${this.#apiEnvString}-${hashedApiKey}`,
                 );
+                localStorage.removeItem(
+                    `aa-session-v2-${this.#apiEnvString}-${hashedApiKey}`,
+                );
+            } catch {
+                // Local storage being unavailable must not stop the SDK.
+            }
 
-                if (sessionValue) {
-                    const existingSessionData = atob(sessionValue);
-                    const parsedExistingSessionData = JSON.parse(
-                        decodeURIComponent(existingSessionData),
-                    );
+            this.#clearExpiredSessions();
 
-                    parsedExistingSession = parsedExistingSessionData.session;
+            // Seeded from the page's actual state, so a page that starts out
+            // unfocused does not immediately report a transition it never made.
+            this.sessionIsBackgrounded = this.#isPageBackgrounded();
 
-                    const currentStoreId =
-                        this.params && this.params.storeId
-                            ? this.params.storeId
-                            : null;
+            // Generates or resumes the session, reporting the matching event.
+            this.#resolveSession();
 
-                    const currentRecipeContextId =
-                        this.params && this.params.recipeContextId
-                            ? this.params.recipeContextId
-                            : null;
+            this.#listenForDocumentEvents();
 
-                    const currentRecipeContextZoneIds =
-                        this.params && this.params.recipeContextZoneIds
-                            ? this.params.recipeContextZoneIds
-                            : null;
+            // Mount every zone the client gave a placement for. Each one then
+            // requests its own ad, independent of the others.
+            this.#mountZones();
 
-                    if (
-                        parsedExistingSessionData.storeId === currentStoreId &&
-                        parsedExistingSessionData.recipeContextId ===
-                            currentRecipeContextId &&
-                        (parsedExistingSessionData.recipeContextZoneIds ===
-                            null ||
-                            (Array.isArray(
-                                parsedExistingSessionData.recipeContextZoneIds,
-                            ) &&
-                                parsedExistingSessionData.recipeContextZoneIds
-                                    .length ===
-                                    currentRecipeContextZoneIds.length)) &&
-                        (currentRecipeContextZoneIds === null ||
-                            (Array.isArray(currentRecipeContextZoneIds) &&
-                                parsedExistingSessionData.recipeContextZoneIds.every(
-                                    (val, index) =>
-                                        val ===
-                                        currentRecipeContextZoneIds[index],
-                                ))) &&
-                        this.#calculateRemainingSessionTimeUntilExpiration(
-                            parsedExistingSession.session_expires_at,
-                        ) > 0
-                    ) {
-                        createNewSession = false;
-                    }
-                }
+            // Get all possible keyword intercept values.
+            // We don't need to wait for this to complete
+            // prior to resolving initialization of the SDK.
+            this.#getKeywordIntercepts();
 
-                if (!createNewSession) {
-                    this.sessionId = parsedExistingSession.session_id;
-                    this.sessionInfo = parsedExistingSession;
-
-                    // Render the Ad Zones.
-                    this.#renderAdZones(parsedExistingSession.zones);
-
-                    // Start the session refresh timer.
-                    this.#createSessionRefreshTimer();
-
-                    // Start the ad zone data refresh timer.
-                    this.#createRefreshAdZonesTimer();
-
-                    // Get all possible keyword intercept values.
-                    // We don't need to wait for this to complete
-                    // prior to resolving initialization of the SDK.
-                    this.#getKeywordIntercepts();
-
-                    // Make the initial call to the Payload data server to see if
-                    // the user has any outstanding items to be added to list.
-                    this.#requestPayloadItemData();
-
-                    resolve();
-                } else {
-                    this.#fetchApiRequest({
-                        method: "POST",
-                        url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/sessions/initialize`,
-                        headers: [
-                            {
-                                name: "accept",
-                                value: "*/*",
-                            },
-                            {
-                                name: "Content-Type",
-                                value: "application/json",
-                            },
-                            {
-                                name: "x-api-key",
-                                value: this.apiKey,
-                            },
-                        ],
-                        requestPayload: {
-                            app_id: this.apiKey,
-                            udid: this.advertiserId,
-                            device_udid: this.advertiserId,
-                            sdk_version: packageJson.version,
-                            device_os: this.deviceOs,
-                            bundle_id: this.bundleId,
-                            bundle_version: this.bundleVersion,
-                            allow_retargeting: this.allowRetargeting,
-                            device_locale: this.deviceLocale,
-                            created_at: Math.floor(new Date().getTime() / 1000),
-                            params: this.params
-                                ? {
-                                      store_id: this.params.storeId
-                                          ? this.params.storeId
-                                          : undefined,
-                                      context_id: this.params.recipeContextId
-                                          ? this.params.recipeContextId
-                                          : undefined,
-                                      context_zone_ids:
-                                          this.params.recipeContextZoneIds &&
-                                          this.params.recipeContextZoneIds
-                                              .length
-                                              ? this.params.recipeContextZoneIds
-                                              : undefined,
-                                  }
-                                : undefined,
-                        },
-                        onSuccess: (response) => {
-                            const result = JSON.parse(response);
-                            const sessionJson = JSON.stringify({
-                                storeId:
-                                    this.params && this.params.storeId
-                                        ? this.params.storeId
-                                        : null,
-                                recipeContextId:
-                                    this.params && this.params.recipeContextId
-                                        ? this.params.recipeContextId
-                                        : null,
-                                recipeContextZoneIds:
-                                    this.params &&
-                                    this.params.recipeContextZoneIds
-                                        ? this.params.recipeContextZoneIds
-                                        : null,
-                                session: result,
-                            });
-
-                            try {
-                                this.#setSessionToLocalStorage(
-                                    hashedApiKey,
-                                    encodeURIComponent(sessionJson),
-                                );
-                            } catch {
-                                this.#setSessionToLocalStorage(
-                                    hashedApiKey,
-                                    this.#sanitizeStringToUTF8(sessionJson),
-                                );
-                            }
-
-                            this.sessionId = result.session_id;
-                            this.sessionInfo = result;
-
-                            // Render the Ad Zones.
-                            this.#renderAdZones(result.zones);
-
-                            // Start the session refresh timer.
-                            this.#createSessionRefreshTimer();
-
-                            // Start the ad zone data refresh timer.
-                            this.#createRefreshAdZonesTimer();
-
-                            // Get all possible keyword intercept values.
-                            // We don't need to wait for this to complete
-                            // prior to resolving initialization of the SDK.
-                            this.#getKeywordIntercepts();
-
-                            // Make the initial call to the Payload data server to see if
-                            // the user has any outstanding items to be added to list.
-                            this.#requestPayloadItemData();
-
-                            resolve();
-                        },
-                        onError: () => {
-                            // Make sure any previous reference to the session is cleared here to avoid
-                            // reuse of incorrect session data upon the next successful initialization.
-                            this.#clearLocalStorageSessionData();
-
-                            reject("An error occurred initializing the SDK.");
-                        },
-                    });
-                }
-            });
-        });
-    }
-
-    /**
-     * Clears the local storage session data.
-     */
-    #clearLocalStorageSessionData() {
-        this.#getHashSHA256(this.apiKey).then((hashedApiKey) => {
-            localStorage.removeItem(
-                `aa-session-${this.apiEnvString}-${hashedApiKey}`,
-            );
+            // Make the initial call to the Payload data server to see if
+            // the user has any outstanding items to be added to list.
+            this.#requestPayloadItemData();
         });
     }
 
     /**
      * Takes a value and hashes it as SHA-256.
      * @param {*} value - The value to hash.
-     * @returns the hashed value.
+     * @returns a Promise of the hashed value.
      */
     #getHashSHA256(value) {
-        return new Promise((resolve) => {
-            const utf8 = new TextEncoder().encode(value);
-            const hashedValue = crypto.subtle
-                .digest("SHA-256", utf8)
-                .then((hashBuffer) => {
-                    const hashArray = Array.from(new Uint8Array(hashBuffer));
-                    const hashHex = hashArray
-                        .map((bytes) => bytes.toString(16).padStart(2, "0"))
-                        .join("");
+        // This hash only namespaces the session's local storage key, so it does not
+        // need to be cryptographic.
+        //
+        // crypto.subtle is restricted to secure contexts and is simply absent on an
+        // http:// page served from anything other than localhost, which covers a lot
+        // of real development and staging hosts. Letting that failure escape took
+        // the entire SDK down: initialize() rejected, so no session was created, no
+        // document listeners were attached and no ad zone was ever mounted. A
+        // non-cryptographic fallback keeps the SDK working there instead.
+        try {
+            if (
+                typeof crypto !== "undefined" &&
+                crypto.subtle &&
+                typeof crypto.subtle.digest === "function"
+            ) {
+                const utf8 = new TextEncoder().encode(value);
 
-                    resolve(hashHex);
-                });
-        });
+                return crypto.subtle
+                    .digest("SHA-256", utf8)
+                    .then((hashBuffer) => {
+                        return Array.from(new Uint8Array(hashBuffer))
+                            .map((bytes) => bytes.toString(16).padStart(2, "0"))
+                            .join("");
+                    })
+                    .catch(() => this.#getFallbackHash(value));
+            }
+        } catch {
+            // Reading crypto.subtle can itself throw in a hardened environment.
+        }
+
+        return Promise.resolve(this.#getFallbackHash(value));
     }
 
     /**
-     * Sanitizes a string so it only contains UTF-8 characters.
-     * @param {string} input - The string to sanitize.
-     * @returns a sanitized string that only contains UTF-8 characters.
+     * Hashes a value without the Web Crypto API, for contexts where it isn't
+     * available. Uses FNV-1a, which is deterministic and spreads well enough to keep
+     * one app's stored session from colliding with another's.
+     * @param {string} value - The value to hash.
+     * @returns the hashed value.
      */
-    #sanitizeStringToUTF8(input) {
-        let output = "";
+    #getFallbackHash(value) {
+        let hash = 0x811c9dc5;
 
-        for (let i = 0; i < input.length; i++) {
-            if (input.charCodeAt(i) <= 127) {
-                output += input.charAt(i);
+        for (let index = 0; index < value.length; index++) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 0x01000193) >>> 0;
+        }
+
+        // Prefixed so it can never be mistaken for, or collide with, a SHA-256 key
+        // written by the same app in a secure context.
+        return `fnv1a${hash.toString(16).padStart(8, "0")}`;
+    }
+
+    /**
+     * Gets the local storage key the session is persisted under.
+     * @returns the local storage key for the session.
+     */
+    #getSessionStorageKey() {
+        return `aa-session-v3-${this.#apiEnvString}-${this.#hashedSessionOwner}`;
+    }
+
+    /**
+     * Generates a new client side session ID.
+     * Format: "JS" followed by 32 characters from [A-Z0-9].
+     * @returns the generated session ID.
+     */
+    #generateSessionId() {
+        const characters = this.#SESSION_ID_CHARACTERS;
+
+        // The largest multiple of the alphabet length that fits in a byte. Rejecting
+        // anything at or above it keeps every character equally likely, instead of
+        // biasing towards the start of the alphabet.
+        const rejectAtOrAbove = 256 - (256 % characters.length);
+
+        let sessionId = "";
+
+        while (sessionId.length < this.#SESSION_ID_LENGTH) {
+            const randomBytes = crypto.getRandomValues(
+                new Uint8Array(this.#SESSION_ID_LENGTH),
+            );
+
+            for (const randomByte of randomBytes) {
+                if (sessionId.length >= this.#SESSION_ID_LENGTH) {
+                    break;
+                }
+
+                if (randomByte < rejectAtOrAbove) {
+                    sessionId += characters.charAt(
+                        randomByte % characters.length,
+                    );
+                }
             }
         }
 
-        return output;
+        return `${this.#SESSION_ID_PREFIX}${sessionId}`;
     }
 
     /**
-     * Takes the session data and writes it to local storage.
-     * @param {string} hashedApiKey - The hashed value of the API key.
-     * @param {string} sessionData - The session data to store to local storage.
+     * Removes stored sessions that have already aged out.
+     *
+     * The stored session is keyed partly on the advertiser ID, so a host that mints
+     * a new one per visit - anonymous users, or an ID rotated on every load - leaves
+     * a fresh entry behind each time and nothing would ever collect them. Local
+     * storage then fills up, and because persisting a session is deliberately
+     * allowed to fail quietly, the first thing the host notices is its own storage
+     * failing rather than anything from the SDK.
+     *
+     * Only entries past the session window are touched, which is what makes this
+     * safe where a blanket sweep of the prefix is not: an entry that old is already
+     * dead, because resolving it would mint a new session anyway. Another user's
+     * live session on a shared device is left exactly where it is.
      */
-    #setSessionToLocalStorage(hashedApiKey, sessionData) {
-        localStorage.setItem(
-            `aa-session-${this.apiEnvString}-${hashedApiKey}`,
-            btoa(sessionData),
+    #clearExpiredSessions() {
+        try {
+            const expiredKeys = [];
+
+            for (let index = 0; index < localStorage.length; index++) {
+                const key = localStorage.key(index);
+
+                if (!key || !key.startsWith("aa-session-v3-")) {
+                    continue;
+                }
+
+                let storedSession;
+
+                try {
+                    storedSession = JSON.parse(localStorage.getItem(key));
+                } catch {
+                    // Unparseable, so it cannot be resumed by anyone. Dropping it is
+                    // the same outcome as leaving it, minus the space.
+                    expiredKeys.push(key);
+
+                    continue;
+                }
+
+                const lastActiveAt =
+                    storedSession &&
+                    typeof storedSession.lastActiveAt === "number"
+                        ? storedSession.lastActiveAt
+                        : 0;
+
+                if (Date.now() - lastActiveAt >= this.#SESSION_LIFETIME_MS) {
+                    expiredKeys.push(key);
+                }
+            }
+
+            // Collected first and removed after, because removing while walking the
+            // index shifts everything after it and would skip entries.
+            for (const key of expiredKeys) {
+                localStorage.removeItem(key);
+            }
+        } catch {
+            // Local storage being unavailable must not stop the SDK.
+        }
+    }
+
+    /**
+     * Reads the persisted session from local storage.
+     * @returns the persisted session, or undefined if there isn't a usable one.
+     */
+    #loadPersistedSession() {
+        try {
+            const storedValue = localStorage.getItem(
+                this.#getSessionStorageKey(),
+            );
+
+            if (!storedValue) {
+                return undefined;
+            }
+
+            const parsedSession = JSON.parse(storedValue);
+
+            if (
+                !parsedSession ||
+                !parsedSession.sessionId ||
+                typeof parsedSession.sessionId !== "string" ||
+                typeof parsedSession.lastActiveAt !== "number"
+            ) {
+                return undefined;
+            }
+
+            return parsedSession;
+        } catch {
+            // A corrupt or unreadable entry is treated the same as no entry at all.
+            return undefined;
+        }
+    }
+
+    /**
+     * Writes the current session to local storage so it survives a page load.
+     */
+    #persistSession() {
+        this.sessionPersistedAt = this.sessionLastActiveAt;
+
+        try {
+            localStorage.setItem(
+                this.#getSessionStorageKey(),
+                JSON.stringify({
+                    sessionId: this.sessionId,
+                    createdAt: this.#sessionCreatedAt,
+                    lastActiveAt: this.sessionLastActiveAt,
+                }),
+            );
+        } catch {
+            // Local storage being unavailable or full must not break ad serving.
+            // The session then just lives for the life of the page.
+        }
+    }
+
+    /**
+     * Stamps the session as active as of now and persists it. Triggered whenever
+     * the tab is about to stop being visible, so the inactivity window gets
+     * measured from the last moment the user was actually looking at the page.
+     */
+    #touchSession(forcePersist) {
+        if (!this.sessionId) {
+            return;
+        }
+
+        const currentTime = Date.now();
+
+        // The in-memory stamp always advances, because it is what decides whether
+        // the session has gone stale. Writing it through to local storage is
+        // throttled: this runs on every reported event, and the stored copy only
+        // has to be fresh enough that reopening the page within the session window
+        // resumes the same ID.
+        const shouldPersist =
+            forcePersist === true ||
+            this.sessionPersistedAt === undefined ||
+            currentTime - this.sessionPersistedAt >=
+                this.#SESSION_TOUCH_PERSIST_MS;
+
+        this.sessionLastActiveAt = currentTime;
+
+        if (shouldPersist) {
+            this.#persistSession();
+        }
+    }
+
+    /**
+     * Generates a new session ID, or resumes the persisted one if it hasn't gone
+     * stale, and reports the matching session event.
+     *
+     * The session window is a sliding one. It only expires once the tab has been
+     * hidden or closed for the full duration, so a tab being actively used keeps
+     * its session ID for as long as it stays in use.
+     * @returns true if a new session was created, false if an existing one resumed.
+     */
+    #resolveSession() {
+        const currentTime = Date.now();
+        const persistedSession = this.#loadPersistedSession();
+        const isNewSession =
+            !persistedSession ||
+            currentTime - persistedSession.lastActiveAt >=
+                this.#SESSION_LIFETIME_MS;
+
+        // An impression left open when the ID changes would report its
+        // impression_end under the new session, leaving the old session an
+        // impression with no end and the new one an end with no impression. The
+        // impression_id is assigned by the API per ad, so the pair cannot simply be
+        // reopened under the new session either - that would report the same
+        // impression_id twice. Closing it here keeps each pair whole and inside one
+        // session; the zone's next ad impresses under the new one.
+        if (isNewSession && this.sessionId) {
+            this.#closeOpenImpressions();
+        }
+
+        if (isNewSession) {
+            this.sessionId = this.#generateSessionId();
+            this.#sessionCreatedAt = currentTime;
+        } else {
+            this.sessionId = persistedSession.sessionId;
+            this.#sessionCreatedAt = persistedSession.createdAt;
+        }
+
+        this.sessionLastActiveAt = currentTime;
+
+        this.#persistSession();
+
+        this.#trackSdkEvent(
+            isNewSession
+                ? this.#SdkEventName.SESSION_CREATED
+                : this.#SdkEventName.SESSION_RESUMED,
+            {
+                sessionId: this.sessionId,
+            },
+        );
+
+        return isNewSession;
+    }
+
+    /**
+     * Makes sure a usable session ID exists before a request that needs one goes
+     * out. Generates a new session if the current one has aged out.
+     * @returns the current session ID.
+     */
+    #ensureSession() {
+        if (this.#sessionRotating) {
+            // Mid-rotation, so the events being reported are the ones closing out
+            // the outgoing session and they belong to the ID that is still current.
+            return this.sessionId;
+        }
+
+        if (!this.#hashedSessionOwner) {
+            // Reachable when a client calls a reporting method before initialize()
+            // has resolved. Minting a session here would key it on an empty API key
+            // and report a session that no configured app owns, so the request is
+            // left to go out without one instead.
+            return this.sessionId;
+        }
+
+        if (!this.sessionId) {
+            this.#resolveSession();
+
+            return this.sessionId;
+        }
+
+        // A visible page the user is actually on is active by definition, so being
+        // used counts as activity and slides the window forward. Without this the
+        // window would be measured from initialize() and a tab left open would
+        // rotate its session ID part way through a single continuous visit,
+        // splitting one visit across two sessions and attributing an ad's
+        // impression_end to a session that never saw its impression.
+        //
+        // The backgrounded check is what stops that becoming a session that never
+        // expires. A visible tab the browser is not focused on keeps serving its
+        // zones by design, and every one of those requests calls through here, so
+        // without it a page left on a second monitor would slide its own window
+        // forward indefinitely and the inactivity window would be unreachable.
+        if (
+            document.visibilityState !== "hidden" &&
+            !this.sessionIsBackgrounded
+        ) {
+            this.#touchSession();
+
+            return this.sessionId;
+        }
+
+        // Not the user's focus, so the window is genuinely elapsing. Rotate once it
+        // runs out.
+        if (
+            Date.now() - this.sessionLastActiveAt >=
+            this.#SESSION_LIFETIME_MS
+        ) {
+            this.#resolveSession();
+        }
+
+        return this.sessionId;
+    }
+
+    /**
+     * Wires up the document level listeners used to track whether the ads on the
+     * page are actually in front of the user.
+     */
+    #listenForDocumentEvents() {
+        // Abort the existing listeners if they were already set up.
+        if (this.documentEventAbortController) {
+            this.documentEventAbortController.abort();
+        }
+
+        this.documentEventAbortController = new AbortController();
+
+        const listenerOptions = {
+            signal: this.documentEventAbortController.signal,
+        };
+
+        document.addEventListener(
+            "visibilitychange",
+            () => {
+                // The session transition is settled first, so any event reported by
+                // the zone handling below already carries the right session ID.
+                this.#updateSessionActivity();
+
+                if (document.visibilityState === "hidden") {
+                    this.#onPageHidden();
+                } else {
+                    this.#onPageVisible();
+                }
+            },
+            listenerOptions,
+        );
+
+        // A tab can stop being the user's focus without ever becoming hidden: the
+        // browser itself loses focus to another application while the tab stays on
+        // screen. visibilitychange does not fire for that, so focus is tracked too.
+        // Only the session responds to these, not the ad zones - an ad in a visible
+        // tab is still in front of the user even when the browser is not the
+        // frontmost app.
+        //
+        // WHEN TESTING THIS BY HAND: devtools counts as a separate window, so a page
+        // with devtools focused already reports document.hasFocus() as false. The
+        // session is therefore backgrounded before you start, and because
+        // SESSION_BACKGROUNDED only fires on a transition, switching to another app
+        // from there reports nothing at all - which looks exactly like the feature
+        // being broken. Click on the page itself first, which reports
+        // SESSION_RESUMED, and only then switch away.
+        // Not registered inside an iframe. There these fire when focus moves
+        // between the frame and the rest of the host page - the user clicking from
+        // the ad into the page's own search box - which says nothing about whether
+        // the browser is still the user's focus. Acting on them would report a
+        // session backgrounded and resumed as the user moved around a page they
+        // never left. An embedded SDK tracks the session by visibility alone, which
+        // still fires for an iframe when the tab itself is hidden.
+        if (this.#isTopLevelDocument()) {
+            window.addEventListener(
+                "blur",
+                () => {
+                    this.#updateSessionActivity(true);
+                },
+                listenerOptions,
+            );
+
+            window.addEventListener(
+                "focus",
+                () => {
+                    this.#updateSessionActivity(false);
+                },
+                listenerOptions,
+            );
+        }
+
+        // A page that fires "pagehide" is not always going away. iOS Safari fires it
+        // on pages it later brings back, and every zone was reported unmounted on
+        // the way out, so without this they would stay unmounted for the rest of the
+        // page's life - no impressions, no refreshes, and no way to recover.
+        window.addEventListener(
+            "pageshow",
+            () => {
+                this.#onPageShow();
+            },
+            listenerOptions,
+        );
+
+        // "pagehide" rather than "beforeunload", because iOS Safari does not
+        // reliably fire "beforeunload" when a tab is closed.
+        window.addEventListener(
+            "pagehide",
+            (event) => {
+                this.#onPageHide(event);
+            },
+            listenerOptions,
         );
     }
 
     /**
-     * Creates a timer to refresh the session prior to its expiration.
+     * Whether this document is the top level page rather than an iframe.
+     *
+     * Focus only says anything about the user's attention in a top level document.
+     * Inside an iframe both halves of the signal are wrong: document.hasFocus() is
+     * false until the user clicks into the frame, so an ad visible on a page the
+     * user is reading looks backgrounded, and the blur and focus events fire when
+     * focus moves between the frame and the rest of the host page, which has
+     * nothing to do with the browser losing focus to another application.
+     * @returns true if the SDK is running in the top level document.
      */
-    #createSessionRefreshTimer() {
-        const expiration = new Date(0); // 0 sets the date to the epoch to start off
-        expiration.setUTCSeconds(this.sessionInfo.session_expires_at);
-
-        const currentTimeMilliseconds = new Date().getTime();
-        const expirationTimeMilliseconds = expiration.getTime();
-        const totalMillisecondsUntilExpire =
-            expirationTimeMilliseconds - currentTimeMilliseconds;
-
-        // The timer will trigger 1 minute prior to the expiration of the session.
-        this.refreshSessionTimer = setTimeout(() => {
-            this.#initializeSession()
-                .then(() => {
-                    // Do nothing upon successful session refresh.
-                })
-                .catch((errorMessage) => {
-                    console.error(errorMessage);
-                });
-        }, totalMillisecondsUntilExpire - 60000);
+    #isTopLevelDocument() {
+        try {
+            return window.top === window;
+        } catch {
+            // Comparing references does not touch a cross origin property, but a
+            // hardened embedder can still make the access itself throw. Treated as
+            // an iframe, which is the conservative answer.
+            return false;
+        }
     }
 
     /**
-     * Creates a timer based on the session data refresh value.
-     * Used to refresh ad zones at the required amount of time.
+     * Determines whether the page has stopped being the user's current focus. That
+     * happens two ways: the tab stops being the shown tab, or the browser itself
+     * stops being the focused application while this tab is the one on screen.
+     * @returns true if the page is currently backgrounded.
      */
-    #createRefreshAdZonesTimer() {
-        // Get the amount of time we will wait until a refresh occurs.
-        // We are setting a minimum refresh time of 5 minutes, so if a
-        // value provided by the API is lower, we don't refresh too often.
-        const timerMs =
-            this.sessionInfo.polling_interval_ms >= 300000
-                ? this.sessionInfo.polling_interval_ms
-                : 300000;
+    #isPageBackgrounded() {
+        if (document.visibilityState === "hidden") {
+            return true;
+        }
 
-        this.refreshAdZonesTimer = setTimeout(() => {
-            this.#refreshAdZones(false);
-        }, timerMs);
+        // hasFocus is what catches the browser losing focus to another app, which
+        // never raises visibilitychange. Treated as focused when unavailable, and
+        // in an iframe, so those hosts behave as they did before rather than
+        // reporting the session as permanently backgrounded.
+        return this.#isTopLevelDocument() &&
+            typeof document.hasFocus === "function"
+            ? !document.hasFocus()
+            : false;
     }
 
     /**
-     * Refreshes the content for all ad zones.
-     * @param requiresSessionInitialize - If true, it is required to re-initialize the session.
+     * Reconciles the session against whether the page is currently the user's focus,
+     * reporting an event only when that actually changes. Several signals can report
+     * the same transition - switching tabs raises both a visibility change and a
+     * focus change - so the events are driven off the tracked state rather than off
+     * the individual listeners.
      */
-    #refreshAdZones(requiresSessionInitialize) {
-        // Need to check if a session timeout has occurred first so
-        // we don't try to refresh the ads with an invalid session.
-        if (
-            requiresSessionInitialize ||
-            this.#calculateRemainingSessionTimeUntilExpiration(
-                this.sessionInfo.session_expires_at,
-            ) <= 0
-        ) {
-            // Refresh the session instead of just refreshing ads.
-            this.#initializeSession()
-                .then(() => {
-                    // Do nothing upon successful session refresh.
-                })
-                .catch((errorMessage) => {
-                    console.error(errorMessage);
-                });
+    #updateSessionActivity(backgroundedHint) {
+        // A blur or focus event is itself proof of the transition, so the hint it
+        // passes is trusted over re-reading document.hasFocus(). Some browsers have
+        // not updated hasFocus() yet at the moment the event fires, and deriving the
+        // state from it there would drop the transition entirely.
+        const isBackgrounded =
+            backgroundedHint === undefined
+                ? this.#isPageBackgrounded()
+                : backgroundedHint || document.visibilityState === "hidden";
+
+        if (isBackgrounded === this.sessionIsBackgrounded) {
+            return;
+        }
+
+        this.sessionIsBackgrounded = isBackgrounded;
+
+        if (isBackgrounded) {
+            this.#onSessionBackgrounded();
         } else {
-            if (this.adZones && this.adZones.length > 0) {
-                // We have a valid session still, so just refresh the ads.
-                this.#fetchApiRequest({
-                    method: "GET",
-                    url: `${this.apiEnv}/v/0.9.5/${
-                        this.deviceOs
-                    }/ads/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${
-                        this.advertiserId
-                    }&sdk=${packageJson.version}${
-                        this.params && this.params.storeId
-                            ? `&storeID=${this.params.storeId}`
-                            : ""
-                    }${
-                        this.params && this.params.recipeContextId
-                            ? `&contextID=${this.params.recipeContextId}`
-                            : ""
-                    }${
-                        this.params && this.params.recipeContextZoneIds
-                            ? `&zoneID=${this.params.recipeContextZoneIds.join(
-                                  ",",
-                              )}`
-                            : ""
-                    }`,
-                    headers: [
-                        {
-                            name: "accept",
-                            value: "application/json",
-                        },
-                        {
-                            name: "x-api-key",
-                            value: this.apiKey,
-                        },
-                    ],
-                    onSuccess: (response) => {
-                        this.sessionInfo = JSON.parse(response);
+            this.#onSessionForegrounded();
+        }
+    }
 
-                        // Render the Ad Zones.
-                        this.#renderAdZones(this.sessionInfo.zones);
+    /**
+     * Triggered when the page stops being the user's focus. Stamps the session as
+     * active as of now, which is what the inactivity window is measured from, and
+     * reports the event.
+     */
+    #onSessionBackgrounded() {
+        this.#touchSession(true);
 
-                        // Call the user defined callback indicating
-                        // the session data has been refreshed.
-                        this.onAdZonesRefreshed();
+        // Sent with keepalive for the same reason the impression close in
+        // #onPageHidden is: closing a tab backgrounds the page first, so this is
+        // the last chance to report it and a plain request is cancelled when the
+        // document goes away.
+        this.#trackSdkEvent(
+            this.#SdkEventName.SESSION_BACKGROUNDED,
+            {
+                sessionId: this.sessionId,
+            },
+            true,
+        );
+    }
 
-                        // Start the timer again based on the new session data.
-                        this.#createRefreshAdZonesTimer();
-                    },
-                    onError: () => {
-                        console.error(
-                            "An error occurred refreshing the ad zones.",
-                        );
+    /**
+     * Triggered when the page becomes the user's focus again. Resumes the session,
+     * or starts a new one if it was away for longer than the session window.
+     */
+    #onSessionForegrounded() {
+        this.#resolveSession();
+    }
 
-                        // Start the timer again so we can make another
-                        // attempt to refresh the session data.
-                        this.#createRefreshAdZonesTimer();
-                    },
-                });
-            } else {
-                // Start the timer again so we can make another
-                // attempt to refresh the session data.
-                this.#createRefreshAdZonesTimer();
+    /**
+     * Triggered when the browser tab becomes visible again.
+     */
+    #onPageVisible() {
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            this.#flushZoneUnfilled(zone);
+
+            // Resume first, then track. An ad that aged out while the zone was
+            // away is replaced by the refetch resuming starts, but that request is
+            // asynchronous, so the ad on screen is the same one either way and the
+            // impression below belongs to it. It stays open until the replacement
+            // actually arrives, which is the ad the user is looking at until then.
+            this.#resumeZoneTimer(zone);
+            this.#trackImpression(zone);
+        }
+    }
+
+    /**
+     * Triggered when the browser tab is no longer visible. The zones are all still
+     * mounted, so no unmount event is reported here.
+     */
+    #onPageHidden() {
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            // Sent with keepalive because a tab close fires this before pagehide,
+            // so this is the call that actually reports the event. Without it the
+            // request is cancelled when the document goes away and the impression
+            // is never closed out.
+            this.#endImpression(zone, true);
+            this.#pauseZoneTimer(zone);
+        }
+    }
+
+    /**
+     * Triggered when the page is going away. This is the last chance to report the
+     * closing events, so they go out on a keepalive request.
+     */
+    #onPageHide(event) {
+        this.#touchSession(true);
+
+        // A page entering the back/forward cache is suspended rather than
+        // destroyed, and can be restored and shown again. Reporting the zones as
+        // unmounted here would leave the mount/unmount pairs unbalanced: on restore
+        // the timers resume and the zones serve ads again, with no second
+        // zone_mounted and no way to ever report zone_unmounted again.
+        const isEnteringBackForwardCache = event
+            ? event.persisted === true
+            : false;
+
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            this.#endImpression(zone, true);
+            this.#pauseZoneTimer(zone);
+
+            if (!isEnteringBackForwardCache) {
+                this.#reportZoneUnmounted(zone, true);
             }
+        }
+    }
+
+    /**
+     * Triggered when a page that had been hidden is shown again, whether it was
+     * restored from the back/forward cache or never actually went away.
+     */
+    #onPageShow() {
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            // A zone still marked mounted came back from the back/forward cache,
+            // where nothing was reported on the way out. It needs no second
+            // zone_mounted, only its timer back.
+            if (!zone.mounted) {
+                zone.mounted = true;
+
+                this.#triggerReportZoneEvent(
+                    zone.zoneId,
+                    this.#ReportedEventType.ZONE_MOUNTED,
+                );
+            }
+
+            // Going away closed the impression on whatever the zone was showing.
+            // That ad cannot simply be counted again - the impression ID belongs to
+            // the ad, so a second pair under the same ID is not a second impression
+            // - and leaving it would put an ad back in front of the user that no
+            // longer counts for anything. The zone takes a fresh ad instead.
+            if (zone.currentAd && zone.impressionEndTracked) {
+                this.#loadNextAd(zone);
+
+                continue;
+            }
+
+            this.#resumeZoneTimer(zone);
+            this.#trackImpression(zone);
+        }
+    }
+
+    /**
+     * Mounts every ad zone the client provided a placement element for.
+     */
+    #mountZones() {
+        // Tear down anything left over from a previous initialize() call, so the
+        // zones and the observer can't be doubled up.
+        for (const zoneId of Object.keys(this.zones)) {
+            this.#unmountZone(this.zones[zoneId]);
+        }
+
+        this.zones = {};
+
+        this.#discardPendingAtlClicks();
+
+        if (this.intersectionObserver) {
+            this.intersectionObserver.disconnect();
+            this.intersectionObserver = undefined;
+        }
+
+        if (
+            this.zonePlacements === undefined ||
+            this.zonePlacements === null ||
+            this.#totalProperties(this.zonePlacements) === 0
+        ) {
+            // Without a zone placement map there is nowhere to put an ad. Clients
+            // using only the keyword intercept feature land here.
+            return;
+        }
+
+        this.intersectionObserver = new IntersectionObserver(
+            (entries) => {
+                this.#onZoneIntersectionChanged(entries);
+            },
+            {
+                root: this.scrollContainerId
+                    ? document.getElementById(this.scrollContainerId)
+                    : null,
+                // A threshold of 0 makes isIntersecting true as soon as any part of
+                // the zone is within view, both horizontally and vertically.
+                threshold: 0,
+            },
+        );
+
+        for (const [zoneId, placementElementId] of Object.entries(
+            this.zonePlacements,
+        )) {
+            this.#mountZone(zoneId, placementElementId);
+        }
+    }
+
+    /**
+     * Mounts a single ad zone and requests its first ad.
+     * @param {string} zoneId - The ad zone ID.
+     * @param {string} placementElementId - The ID of the client element the zone displays within.
+     */
+    #mountZone(zoneId, placementElementId) {
+        const containerElement = document.getElementById(placementElementId);
+
+        if (!containerElement) {
+            console.error(
+                `No element with the ID "${placementElementId}" was found to display ad zone "${zoneId}" within.`,
+            );
+
+            // The zone can't be displayed at all, so record it as having no ad.
+            this.#updateAdAvailability(zoneId, false);
+
+            return;
+        }
+
+        const zone = {
+            zoneId,
+            placementElementId,
+            containerElement,
+            currentAd: undefined,
+            portWidth: undefined,
+            portHeight: undefined,
+            refreshSeconds: this.#DEFAULT_AD_REFRESH_SECONDS,
+            // True once a response, filled or not, has come back for this zone.
+            loaded: false,
+            // Guards against overlapping ad requests for the same zone.
+            inFlight: false,
+            hasDisplayed: false,
+            adFetchedAt: 0,
+            msLeftOnRefresh: 0,
+            countdownResumedAt: 0,
+            refreshTimerId: undefined,
+            timerRunning: false,
+            isIntersecting: false,
+            mounted: true,
+            impressionTracked: false,
+            impressionEndTracked: false,
+            interactionReported: false,
+            refetchWhenSettled: false,
+            unfilledReported: false,
+            pendingUnfilledReason: undefined,
+        };
+
+        this.zones[zoneId] = zone;
+
+        // Reported for every zone, whether it ever gets an ad or not.
+        this.#triggerReportZoneEvent(
+            zoneId,
+            this.#ReportedEventType.ZONE_MOUNTED,
+        );
+
+        this.intersectionObserver.observe(containerElement);
+
+        // The observer reports the zone's starting position asynchronously, so the
+        // first ad is requested here rather than waiting on it.
+        this.#fetchAd(zone);
+    }
+
+    /**
+     * Tears a single ad zone down, reporting the closing events for it.
+     * @param {object} zone - The zone state to unmount.
+     */
+    #unmountZone(zone) {
+        if (!zone) {
+            return;
+        }
+
+        this.#endImpression(zone);
+        this.#cancelZoneTimer(zone);
+
+        if (this.intersectionObserver && zone.containerElement) {
+            this.intersectionObserver.unobserve(zone.containerElement);
+        }
+
+        // Disconnecting the observer does not deliver a final callback, so the
+        // cached intersection state is cleared by hand.
+        zone.isIntersecting = false;
+
+        // The ad comes down with the zone. Everything that made it an ad has just
+        // been torn off it - the impression is closed, the timer is cancelled and
+        // the click handler goes with the element - so leaving the creative in the
+        // host's layout would keep showing the user an ad that is no longer being
+        // measured and can no longer be clicked.
+        if (zone.containerElement) {
+            try {
+                zone.containerElement.innerHTML = "";
+            } catch {
+                // Teardown has to finish. This runs in a loop over every zone and
+                // ahead of the listener and timer cleanup, so letting a failure
+                // here escape would strand the zones after it - still observed,
+                // still reporting - over nothing worse than some leftover markup.
+            }
+        }
+
+        this.#reportZoneUnmounted(zone);
+    }
+
+    /**
+     * Reports the "zone_unmounted" event, at most once per mounted zone.
+     * @param {object} zone - The zone state.
+     * @param {boolean} useKeepalive - If true, the request is made so it survives the page going away.
+     */
+    #reportZoneUnmounted(zone, useKeepalive) {
+        if (!zone.mounted) {
+            return;
+        }
+
+        zone.mounted = false;
+
+        this.#triggerReportZoneEvent(
+            zone.zoneId,
+            this.#ReportedEventType.ZONE_UNMOUNTED,
+            undefined,
+            useKeepalive,
+        );
+    }
+
+    /**
+     * Triggered when the position of one or more ad zones relative to the viewport
+     * has changed.
+     * @param {object[]} entries - The intersection entries that changed.
+     */
+    #onZoneIntersectionChanged(entries) {
+        for (const entry of entries) {
+            const zone = Object.values(this.zones).find(
+                (zoneToCheck) => zoneToCheck.containerElement === entry.target,
+            );
+
+            if (!zone) {
+                continue;
+            }
+
+            // A threshold of 0 makes this true as soon as any part of the zone is
+            // within the view, on both axes.
+            //
+            // NOTE: This is one pixel more generous than it looks. Chrome also
+            // reports isIntersecting for a zone whose edge exactly meets the edge of
+            // the view, where the intersection has zero area and nothing is painted.
+            // Gating on entry.intersectionRect having area was tried and reverted:
+            // the observer only reports threshold crossings, so a zone that first
+            // arrives as a zero area edge touch gets no further callback as it
+            // scrolls further in, and its impression is lost for good. Counting an
+            // impression one pixel early is the cheaper mistake.
+            zone.isIntersecting = entry.isIntersecting;
+
+            if (!zone.containerElement.isConnected) {
+                // The host framework may have swapped the container for a brand new
+                // node carrying the same element ID, which a keyed remount, a tab
+                // switch or an accordion reopening all do. Re-point at the
+                // replacement and carry on, because giving up here would leave the
+                // client with an empty container for the life of the page while the
+                // availability map still claimed the zone had an ad.
+                if (this.#reattachZone(zone)) {
+                    continue;
+                }
+
+                // The container is genuinely gone. A zone that left the page is
+                // showing its ad to nobody, so close it out.
+                this.#unmountZone(zone);
+
+                delete this.zones[zone.zoneId];
+
+                continue;
+            }
+
+            if (this.#zoneIsOnScreen(zone)) {
+                this.#flushZoneUnfilled(zone);
+
+                // Resume first, then track. An ad that aged out while the zone was
+                // away is replaced by the refetch resuming starts, but that request is
+                // asynchronous, so the ad on screen is the same one either way and the
+                // impression below belongs to it. It stays open until the replacement
+                // actually arrives, which is the ad the user is looking at until then.
+                this.#resumeZoneTimer(zone);
+                this.#trackImpression(zone);
+            } else {
+                this.#endImpression(zone);
+                this.#pauseZoneTimer(zone);
+            }
+        }
+    }
+
+    /**
+     * Determines whether the full screen ad popover is currently open. While it is,
+     * every ad zone on the page is completely covered by it.
+     * @returns true if the ad popover is open.
+     */
+    #isAdPopoverOpen() {
+        return document.getElementById("adContentsPopoverContainer") !== null;
+    }
+
+    /**
+     * Invokes a callback the client supplied, without letting a failure inside it
+     * break ad serving. These run in the middle of placing an ad, so an exception
+     * escaping one would otherwise leave the zone rendered but with no refresh
+     * timer and no impression, for the life of the page.
+     * @param {string} callbackName - The name of the client callback to invoke.
+     * @param {...any} args - The arguments to pass to the callback.
+     */
+    #invokeClientCallback(callbackName, ...args) {
+        try {
+            this[callbackName](...args);
+        } catch (err) {
+            console.error(
+                `An error occurred inside the "${callbackName}" callback.`,
+                err,
+            );
+        }
+    }
+
+    /**
+     * Re-points a zone at a replacement container element, when the one it was
+     * displaying within has been detached but an element with the same ID is back
+     * in the document.
+     * @param {object} zone - The zone state.
+     * @returns true if the zone was successfully re-pointed at a new element.
+     */
+    #reattachZone(zone) {
+        const replacementElement = document.getElementById(
+            zone.placementElementId,
+        );
+
+        if (
+            !replacementElement ||
+            replacementElement === zone.containerElement ||
+            !this.intersectionObserver
+        ) {
+            return false;
+        }
+
+        this.intersectionObserver.unobserve(zone.containerElement);
+
+        zone.containerElement = replacementElement;
+
+        // The replacement's position is unknown until the observer reports it, so
+        // the zone counts as off screen until then. That keeps a remount from
+        // recording an impression for an element nobody has measured yet.
+        zone.isIntersecting = false;
+
+        this.intersectionObserver.observe(replacementElement);
+
+        // The new node is empty, so the ad the zone is already holding has to be
+        // put back into it.
+        this.#renderZoneContents(zone);
+
+        return true;
+    }
+
+    /**
+     * Determines whether an ad zone is actually in front of the user right now.
+     * The refresh countdown, the impression events, and the unfilled report all
+     * hang off this.
+     * @param {object} zone - The zone state.
+     * @returns true if the zone is currently on screen.
+     */
+    #zoneIsOnScreen(zone) {
+        return (
+            // A zone that has been torn down is not on screen no matter what the
+            // last intersection callback said. An ad request already in flight when
+            // unmount() ran still resolves, and without this it would re-render the
+            // ad, report an impression and arm a fresh timer against a dead zone.
+            zone.mounted &&
+            zone.isIntersecting &&
+            zone.containerElement.isConnected &&
+            document.visibilityState !== "hidden" &&
+            // The popover covers the whole viewport, so nothing behind it is
+            // visible. Without this the zones underneath keep counting impressions
+            // and rotating ads that nobody can see, which is what the previous
+            // implementation's "don't cycle while a popup is open" rule prevented.
+            !this.#isAdPopoverOpen()
+        );
+    }
+
+    /**
+     * Requests a single ad for the given zone.
+     * @param {object} zone - The zone state to request an ad for.
+     */
+    #fetchAd(zone) {
+        if (!zone.mounted) {
+            return;
+        }
+
+        if (zone.inFlight) {
+            // A targeting param changed while this zone's request was in flight.
+            // Remembering it here means the zone picks up the new store or recipe
+            // context as soon as the current request settles, instead of showing
+            // the previous one's ad until the next refresh.
+            zone.refetchWhenSettled = true;
+
+            return;
+        }
+
+        zone.inFlight = true;
+        zone.unfilledReported = false;
+        zone.pendingUnfilledReason = undefined;
+
+        this.#fetchApiRequest({
+            method: "POST",
+            url: `${this.apiEnv}/v/1.0.0/ad/retrieve`,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+                {
+                    name: "Content-Type",
+                    value: "application/json",
+                },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
+                },
+            ],
+            requestPayload: {
+                sdkId: packageJson.version,
+                bundleId: this.bundleId,
+                userId: this.advertiserId,
+                zoneId: zone.zoneId,
+                storeId:
+                    this.params && this.params.storeId
+                        ? this.params.storeId
+                        : "",
+                contextId: this.#getContextIdForZone(zone.zoneId),
+                sessionId: this.#ensureSession(),
+                extra: "",
+            },
+            onSuccess: (response) => {
+                zone.inFlight = false;
+
+                this.#handleAdResponse(zone, response);
+                this.#fetchQueuedAd(zone);
+            },
+            onError: () => {
+                zone.inFlight = false;
+
+                this.#handleAdRequestFailed(zone);
+                this.#fetchQueuedAd(zone);
+            },
+        });
+    }
+
+    /**
+     * Issues the refetch that was requested while a zone's request was in flight.
+     * @param {object} zone - The zone state.
+     */
+    #fetchQueuedAd(zone) {
+        if (!zone.refetchWhenSettled) {
+            return;
+        }
+
+        zone.refetchWhenSettled = false;
+
+        this.#loadNextAd(zone);
+    }
+
+    /**
+     * Gets the recipe context ID that applies to the given zone, if any.
+     * @param {string} zoneId - The ad zone ID.
+     * @returns the context ID to send for the zone, or an empty string.
+     */
+    #getContextIdForZone(zoneId) {
+        if (!this.params || !this.params.recipeContextId) {
+            return "";
+        }
+
+        const contextZoneIds = this.params.recipeContextZoneIds;
+
+        // With no zone list provided, the context applies to every zone.
+        if (!contextZoneIds || !contextZoneIds.length) {
+            return this.params.recipeContextId;
+        }
+
+        return contextZoneIds.includes(zoneId)
+            ? this.params.recipeContextId
+            : "";
+    }
+
+    /**
+     * Handles a successful ad request response for a zone.
+     * @param {object} zone - The zone state.
+     * @param {object} response - The parsed API response.
+     */
+    #handleAdResponse(zone, response) {
+        const zoneData = response && response.data ? response.data : undefined;
+        const adData = zoneData && zoneData.ad ? zoneData.ad : undefined;
+
+        zone.loaded = true;
+
+        if (zoneData) {
+            zone.portWidth = zoneData.port_width;
+            zone.portHeight = zoneData.port_height;
+        }
+
+        // An ad object with no ID is how the API reports that it had nothing to
+        // serve. Its refresh_time is the backoff to wait before asking again.
+        if (!adData || !adData.id) {
+            this.#reportZoneUnfilled(zone, this.#ZoneUnfilledReason.NO_AD);
+            this.#displayAd(
+                zone,
+                undefined,
+                adData ? adData.refresh_time : undefined,
+            );
+
+            return;
+        }
+
+        this.#displayAd(zone, this.#normalizeAd(adData, zone.zoneId));
+    }
+
+    /**
+     * Handles a failed ad request for a zone.
+     * @param {object} zone - The zone state.
+     */
+    #handleAdRequestFailed(zone) {
+        zone.loaded = true;
+
+        // A zone already showing an ad keeps it. The request that failed was for
+        // the ad's replacement, and blanking the zone would take a paying ad off
+        // the page over a transient network error and leave the slot empty for a
+        // whole cycle.
+        if (zone.currentAd) {
+            // Not reported as unfilled: the zone is still filled, and still showing
+            // the ad the user can see. Saying otherwise would count a zone that is
+            // working as one with nothing to show.
+            zone.pendingUnfilledReason = undefined;
+
+            // The click guard has to be released even though the ad did not change.
+            // It is normally reset by #displayAd, which does not run on this path,
+            // and until it is the ad on screen silently ignores every further click
+            // - no interaction, no items handed over, and no way for the user to
+            // tell the difference from an ad that does nothing.
+            zone.interactionReported = false;
+
+            // No timer work here: #loadNextAd arms the countdown before the
+            // request goes out, exactly so a failing response cannot leave the zone
+            // without one, so the retry is already scheduled.
+            return;
+        }
+
+        // Nothing to show, which is what "unfilled" means.
+        this.#reportZoneUnfilled(zone, this.#ZoneUnfilledReason.REQUEST_FAILED);
+
+        this.#displayAd(zone, undefined, zone.refreshSeconds);
+    }
+
+    /**
+     * Queues the "zone_unfilled" event for a zone, and reports it if the zone is
+     * already known to be on screen.
+     *
+     * The report is held rather than dropped when the zone isn't on screen yet,
+     * because an ad request can finish before the intersection observer has
+     * reported the zone's starting position. Dropping it there would lose the
+     * unfilled report for any zone whose request loses that race.
+     * @param {object} zone - The zone state.
+     * @param {string} reason - The reason the zone went unfilled.
+     */
+    #reportZoneUnfilled(zone, reason) {
+        if (zone.unfilledReported) {
+            return;
+        }
+
+        zone.pendingUnfilledReason = reason;
+
+        this.#flushZoneUnfilled(zone);
+    }
+
+    /**
+     * Reports a queued "zone_unfilled" event once the zone is on screen. Fires at
+     * most once per ad request.
+     * @param {object} zone - The zone state.
+     */
+    #flushZoneUnfilled(zone) {
+        if (
+            !zone.pendingUnfilledReason ||
+            zone.unfilledReported ||
+            !this.#zoneIsOnScreen(zone)
+        ) {
+            return;
+        }
+
+        const reason = zone.pendingUnfilledReason;
+
+        zone.unfilledReported = true;
+        zone.pendingUnfilledReason = undefined;
+
+        this.#triggerReportZoneEvent(
+            zone.zoneId,
+            this.#ReportedEventType.ZONE_UNFILLED,
+            reason,
+        );
+    }
+
+    /**
+     * Normalizes an ad from the API into the shape the SDK works with.
+     * @param {object} adData - The ad data from the API.
+     * @param {string} zoneId - The ID of the zone the ad belongs to.
+     * @returns the normalized ad.
+     */
+    #normalizeAd(adData, zoneId) {
+        return {
+            ...adData,
+            // Carried on the ad so every reported event can name its zone without
+            // having to parse it back out of the impression ID.
+            zone_id: zoneId,
+        };
+    }
+
+    /**
+     * Gets the number of seconds an ad should be displayed for before the next one
+     * is requested.
+     * @param {number} refreshTimeValue - The refresh_time value served for the ad.
+     * @returns the refresh time in seconds.
+     */
+    #getRefreshSeconds(refreshTimeValue) {
+        const refreshTime = Number(refreshTimeValue);
+
+        if (!Number.isFinite(refreshTime) || refreshTime <= 0) {
+            return this.#DEFAULT_AD_REFRESH_SECONDS;
+        }
+
+        return Math.max(refreshTime, this.#MINIMUM_AD_REFRESH_SECONDS);
+    }
+
+    /**
+     * Places an ad within its zone, or clears the zone when there is no ad, and
+     * arms the refresh countdown.
+     * @param {object} zone - The zone state.
+     * @param {object} ad - The ad to display, or undefined when there is no ad to show.
+     * @param {number} refreshSecondsOverride - (optional) The refresh time to use when there is no ad.
+     */
+    #displayAd(zone, ad, refreshSecondsOverride) {
+        if (!zone.mounted) {
+            // The zone was torn down while its ad request was in flight. Dropping
+            // the response here keeps unmount() final: no DOM write, no impression
+            // and no refresh timer for a zone the client has already discarded.
+            return;
+        }
+
+        // Each ad gets its own impression pair, so the previous ad is closed out
+        // before the tracking flags reset.
+        this.#endImpression(zone);
+
+        const wasAlreadyDisplayed = zone.hasDisplayed;
+
+        zone.currentAd = ad;
+        zone.refreshSeconds = this.#getRefreshSeconds(
+            ad ? ad.refresh_time : refreshSecondsOverride,
+        );
+        zone.impressionTracked = false;
+        zone.impressionEndTracked = false;
+        zone.interactionReported = false;
+        zone.hasDisplayed = true;
+
+        // Arms the countdown fresh from this ad's refresh time. Done before the
+        // render and before any client callback, so that even an unexpected
+        // failure further down cannot leave the zone without a refresh timer.
+        this.#restartZoneTimer(zone);
+
+        this.#renderZoneContents(zone);
+        this.#trackImpression(zone);
+
+        this.#updateAdAvailability(zone.zoneId, ad !== undefined);
+
+        if (wasAlreadyDisplayed) {
+            // Call the user defined callback indicating the zone's ad has changed.
+            this.#invokeClientCallback("onAdZoneRefreshed", zone.zoneId);
+        }
+    }
+
+    /**
+     * Renders the current contents of a zone into its container element.
+     * @param {object} zone - The zone state.
+     */
+    #renderZoneContents(zone) {
+        if (!zone.containerElement || !zone.containerElement.isConnected) {
+            return;
+        }
+
+        zone.containerElement.innerHTML = "";
+
+        if (zone.currentAd) {
+            zone.containerElement.appendChild(
+                this.#generateAdZoneContents(zone),
+            );
+        }
+    }
+
+    /**
+     * Tells the client whether a zone ended up with an ad to show.
+     *
+     * Reported one zone at a time, because that is how the ads now arrive: each
+     * zone asks for its own ad and hears back on its own schedule. An aggregate
+     * across all zones could only be produced by guessing at the ones that had not
+     * answered yet, and a zone still waiting is not a zone without an ad.
+     * @param {string} zoneId - The ad zone ID.
+     * @param {boolean} hasAd - If true, an ad is available for the zone.
+     */
+    #updateAdAvailability(zoneId, hasAd) {
+        this.#invokeClientCallback("onAdRetrieved", zoneId, hasAd);
+    }
+
+    /**
+     * Immediately requests a new ad for the given zones, discarding whatever they
+     * are currently showing. Used when a targeting param changes and the ads on
+     * screen are no longer the right ones.
+     * @param {string[]} zoneIds - (optional) The zones to refresh. Defaults to every mounted zone.
+     */
+    #refreshZones(zoneIds) {
+        const zoneIdsToRefresh =
+            zoneIds && zoneIds.length ? zoneIds : Object.keys(this.zones);
+
+        for (const zoneId of zoneIdsToRefresh) {
+            const zone = this.zones[zoneId];
+
+            if (zone) {
+                this.#loadNextAd(zone);
+            }
+        }
+    }
+
+    /**
+     * Requests the next ad for a zone, replacing the one currently displayed.
+     * @param {object} zone - The zone state.
+     */
+    #loadNextAd(zone) {
+        // Arm the countdown before the request goes out, so a slow or failing
+        // response can't leave the zone without a timer.
+        this.#restartZoneTimer(zone);
+
+        if (zone.inFlight) {
+            // A request is already outstanding, and whatever it returns was chosen
+            // under the old targeting params. Recording the intent here covers the
+            // zone's very first request too, which has not "loaded" yet and would
+            // otherwise fall straight through the guard below and lose the change.
+            zone.refetchWhenSettled = true;
+
+            return;
+        }
+
+        if (!zone.loaded) {
+            return;
+        }
+
+        // The impression is deliberately left open here. The ad is still on the
+        // page until its replacement actually arrives, and #displayAd closes it at
+        // that moment. Closing it now would end the impression early on every
+        // rotation, and on a refresh that fails the zone keeps the ad it already
+        // has - leaving it in front of the user with its impression already closed
+        // and no way to reopen it, since the impression ID belongs to the ad.
+        this.#fetchAd(zone);
+    }
+
+    /**
+     * Arms a zone's refresh countdown fresh from its current refresh time.
+     * @param {object} zone - The zone state.
+     */
+    #restartZoneTimer(zone) {
+        this.#cancelZoneTimer(zone);
+
+        zone.adFetchedAt = Date.now();
+        zone.msLeftOnRefresh = zone.refreshSeconds * 1000;
+
+        this.#startZoneTimer(zone);
+    }
+
+    /**
+     * Pauses every mounted zone's countdown.
+     *
+     * Used when the ad popover opens, which covers the whole viewport.
+     */
+    #pauseAllZoneTimers() {
+        for (const zoneId of Object.keys(this.zones)) {
+            this.#pauseZoneTimer(this.zones[zoneId]);
+        }
+    }
+
+    /**
+     * Resumes every mounted zone's countdown, optionally leaving one alone.
+     *
+     * Used when the ad popover closes. The zone whose ad opened the popover is
+     * skipped, because the caller rotates it explicitly instead: it held its ad
+     * while the user was engaged with it and is owed a fresh one.
+     * @param {object} [skipZone] - A zone to leave for the caller to handle.
+     */
+    #resumeAllZoneTimers(skipZone) {
+        for (const zoneId of Object.keys(this.zones)) {
+            const zone = this.zones[zoneId];
+
+            if (skipZone && zone === skipZone) {
+                continue;
+            }
+
+            this.#resumeZoneTimer(zone);
+        }
+    }
+
+    /**
+     * Freezes what is left of a zone's countdown, so a zone that is off screen or
+     * sitting in a hidden tab neither refreshes nor fetches.
+     * @param {object} zone - The zone state.
+     */
+    #pauseZoneTimer(zone) {
+        if (!zone.timerRunning) {
+            return;
+        }
+
+        zone.msLeftOnRefresh = Math.max(
+            0,
+            zone.msLeftOnRefresh - (Date.now() - zone.countdownResumedAt),
+        );
+
+        this.#cancelZoneTimer(zone);
+    }
+
+    /**
+     * Resumes a zone's countdown. An ad that outlived its own refresh time while
+     * the countdown was frozen gets replaced immediately, rather than being shown
+     * for the leftover time it never spent on screen.
+     * @param {object} zone - The zone state.
+     */
+    #resumeZoneTimer(zone) {
+        if (zone.timerRunning || !this.#zoneIsOnScreen(zone)) {
+            return;
+        }
+
+        if (
+            zone.loaded &&
+            Date.now() - zone.adFetchedAt >= zone.refreshSeconds * 1000
+        ) {
+            this.#loadNextAd(zone);
+        } else {
+            this.#startZoneTimer(zone);
+        }
+    }
+
+    /**
+     * Starts a zone's countdown with whatever time it has left.
+     * @param {object} zone - The zone state.
+     */
+    #startZoneTimer(zone) {
+        if (!zone.loaded || zone.timerRunning || !this.#zoneIsOnScreen(zone)) {
+            return;
+        }
+
+        zone.timerRunning = true;
+        zone.countdownResumedAt = Date.now();
+        zone.refreshTimerId = setTimeout(() => {
+            zone.timerRunning = false;
+
+            this.#loadNextAd(zone);
+        }, zone.msLeftOnRefresh);
+    }
+
+    /**
+     * Cancels a zone's countdown.
+     * @param {object} zone - The zone state.
+     */
+    #cancelZoneTimer(zone) {
+        if (zone.refreshTimerId) {
+            clearTimeout(zone.refreshTimerId);
+
+            zone.refreshTimerId = undefined;
+        }
+
+        zone.timerRunning = false;
+    }
+
+    /**
+     * Reports the "impression" event for a zone's current ad, at most once per ad.
+     * @param {object} zone - The zone state.
+     */
+    #trackImpression(zone) {
+        if (
+            !zone.currentAd ||
+            zone.impressionTracked ||
+            !this.#zoneIsOnScreen(zone)
+        ) {
+            return;
+        }
+
+        zone.impressionTracked = true;
+
+        this.#triggerReportAdEvent(
+            zone.currentAd,
+            this.#ReportedEventType.IMPRESSION,
+        );
+    }
+
+    /**
+     * Reports the "impression_end" event for a zone's current ad. Only fires once,
+     * and only if a real impression was tracked for that ad first.
+     * @param {object} zone - The zone state.
+     * @param {boolean} useKeepalive - If true, the request is made so it survives the page going away.
+     */
+    #endImpression(zone, useKeepalive) {
+        if (!zone.impressionTracked || zone.impressionEndTracked) {
+            return;
+        }
+
+        zone.impressionEndTracked = true;
+
+        this.#triggerReportAdEvent(
+            zone.currentAd,
+            this.#ReportedEventType.IMPRESSION_END,
+            undefined,
+            useKeepalive,
+        );
+    }
+
+    /**
+     * Closes out every impression still open across all zones, so none of them
+     * straddles a change of session ID.
+     */
+    #closeOpenImpressions() {
+        this.#sessionRotating = true;
+
+        try {
+            for (const zoneId of Object.keys(this.zones)) {
+                this.#endImpression(this.zones[zoneId]);
+            }
+        } finally {
+            this.#sessionRotating = false;
         }
     }
 
@@ -1201,6 +2551,11 @@ class AdadaptedJsSdk {
         this.#fetchApiRequest({
             method: "POST",
             url: `${this.payloadApiEnv}/v/1/tracking`,
+            // Reported and not read: the response is unused, and the user
+            // action that triggers it is routinely the last thing they do
+            // before closing the tab. Without keepalive that request is
+            // cancelled with the document and the signal is lost silently.
+            keepalive: true,
             headers: [
                 {
                     name: "Content-Type",
@@ -1229,200 +2584,12 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Renders or updates the ad zone data.
-     * @param {object} adZonesData - All ad zone data needed for the zones.
-     */
-    #renderAdZones(adZonesData) {
-        if (
-            this.zonePlacements !== undefined &&
-            this.zonePlacements !== null &&
-            this.#totalProperties(this.zonePlacements) > 0
-        ) {
-            // The zone placement map was provided and contained
-            // entries, so we can now generate the ad zones.
-            this.adZones = this.#generateAdZones(adZonesData);
-
-            // Abort the existing listener if one exists for this specific method.
-            if (this.scrollEventAbortController) {
-                this.scrollEventAbortController.abort();
-            }
-
-            this.scrollEventAbortController = new AbortController();
-
-            // Add the scroll event that checks if the ad zone is within view.
-            let scrollElement = document;
-
-            if (this.scrollContainerId) {
-                scrollElement = document.getElementById(this.scrollContainerId);
-            }
-
-            scrollElement.addEventListener(
-                "scroll",
-                () => {
-                    this.#onElementScroll(this.adZones);
-                },
-                {
-                    signal: this.scrollEventAbortController.signal,
-                },
-            );
-
-            for (const adZone of this.adZones) {
-                const zonePlacementId = this.zonePlacements[adZone.zoneId];
-                const containerElement =
-                    document.getElementById(zonePlacementId);
-
-                if (zonePlacementId && containerElement) {
-                    containerElement.innerHTML = "";
-                    containerElement.appendChild(adZone.adZone);
-
-                    this.#initializeAd(adZone.adZoneData);
-                }
-            }
-        }
-    }
-
-    /**
-     * Creates all Ad Zone Info objects based on provided Ad Zones.
-     * @param {object} adZonesData - The object of available zones.
-     * @returns the array of Ad Zone Info objects.
-     */
-    #generateAdZones(adZonesData) {
-        const adZoneInfoList = [];
-        const adZonesAdAvailabilityMap = {};
-
-        // We are iterating an object, so we will get the property ID
-        // and use that to access the data from the same object.
-        for (const adZoneId in adZonesData) {
-            if (adZonesData.hasOwnProperty(adZoneId)) {
-                // Generates a random number between 0 and (number of available ads - 1).
-                const displayedAdIndex = Math.floor(
-                    Math.random() * adZonesData[adZoneId].ads.length,
-                );
-
-                // Create the ad zone and all child elements.
-                const adZoneContainer = this.#generateAdZoneContents(
-                    adZonesData[adZoneId],
-                    displayedAdIndex,
-                );
-
-                // Push to the ad zone array.
-                adZoneInfoList.push({
-                    zoneId: adZoneId,
-                    adZone: adZoneContainer,
-                    adZoneData: adZonesData[adZoneId],
-                });
-
-                // Track if the ad zone had ads available.
-                adZonesAdAvailabilityMap[adZoneId] =
-                    adZonesData[adZoneId].ads.length > 0;
-            }
-        }
-
-        // Ensure all possible ad zone IDs have a value to indicate ads are or are not available.
-        for (const [key, value] of Object.entries(this.zonePlacements)) {
-            if (!adZonesAdAvailabilityMap[key]) {
-                adZonesAdAvailabilityMap[key] = false;
-            }
-        }
-
-        // Trigger the callback to let the app know what ad zones have ads.
-        this.onAdsRetrieved(adZonesAdAvailabilityMap);
-
-        return adZoneInfoList;
-    }
-
-    /**
-     * Triggered when the assigned element is scrolled to check if the ada zone is in view.
-     * @param {object[]} adZones - The ad zones to iterate to check if they are currently in view.
-     */
-    #onElementScroll(adZones) {
-        for (const adZone of adZones) {
-            const zonePlacementId = this.zonePlacements[adZone.zoneId];
-            const containerElement = document.getElementById(zonePlacementId);
-
-            if (containerElement) {
-                const adZoneDisplayedAdIndex = parseInt(
-                    containerElement
-                        .getElementsByClassName("AdZone")[0]
-                        .getAttribute("data-displayedAdIndex"),
-                    10,
-                );
-
-                if (
-                    this.#isInViewport(containerElement) &&
-                    !this.adZoneCurrentAdImpressionTracker[adZone.adZoneData.id]
-                ) {
-                    this.#triggerReportAdEvent(
-                        adZone.adZoneData.ads[adZoneDisplayedAdIndex],
-                        this.#ReportedEventType.IMPRESSION,
-                    );
-
-                    this.adZoneCurrentAdImpressionTracker[
-                        adZone.adZoneData.id
-                    ] = true;
-                }
-            }
-        }
-    }
-
-    /**
-     * Checks the viewport to see if an element is within view based on a % visible threshold.
-     * @param {any} element - The element to check if its withi the viewport.
-     * @returns true if the element is within view based on a % visible threshold.
-     */
-    #isInViewport(element) {
-        const visibleThreshold = 0.4;
-        const rect = element.getBoundingClientRect();
-
-        const dimension = {
-            x: rect.x,
-            y: rect.y,
-            w: rect.width,
-            h: rect.height,
-        };
-        const viewport = {
-            x: 0,
-            y: 0,
-            w: window.innerWidth,
-            h: window.innerHeight,
-        };
-        const elementSize = dimension.w * dimension.h;
-        const overlap = this.#intersection(dimension, viewport);
-
-        // Return true if the amount of the element displayed within the viewport is 40% or greater.
-        return overlap / elementSize >= visibleThreshold;
-    }
-
-    /**
-     * Determines the overlapping area between two rectangles.
-     * @param {*} area1 - The first rectangle to compare.
-     * @param {*} area2 - The second rectangle to compare.
-     * @returns the intersecting area that can be used to determine how much of an element is within the viewport.
-     */
-    #intersection(area1, area2) {
-        const x_overlap = Math.max(
-            0,
-            Math.min(area1.x + area1.w, area2.x + area2.w) -
-                Math.max(area1.x, area2.x),
-        );
-        const y_overlap = Math.max(
-            0,
-            Math.min(area1.y + area1.h, area2.y + area2.h) -
-                Math.max(area1.y, area2.y),
-        );
-        const overlapArea = x_overlap * y_overlap;
-
-        return overlapArea;
-    }
-
-    /**
      * Generates the current contents of an ad zone.
-     * @param {object} adZoneData - The ad zone object.
-     * @param {number} displayedAdIndex - The index of the ad unit in the ad zone.
+     * @param {object} zone - The zone state, holding the ad to display.
      * @returns the generated ad zone contents.
      */
-    #generateAdZoneContents(adZoneData, displayedAdIndex) {
-        const displayedAd = adZoneData.ads[displayedAdIndex];
+    #generateAdZoneContents(zone) {
+        const displayedAd = zone.currentAd;
 
         const adZoneContainer = document.createElement("div");
         adZoneContainer.className = "AdZone";
@@ -1430,7 +2597,6 @@ class AdadaptedJsSdk {
         adZoneContainer.style.width = "100%";
         adZoneContainer.style.height = "100%";
         adZoneContainer.style.cursor = "pointer";
-        adZoneContainer.setAttribute("data-displayedAdIndex", displayedAdIndex);
 
         const adZoneIFrame = document.createElement("iframe");
         adZoneIFrame.className = "ad-frame";
@@ -1451,7 +2617,7 @@ class AdadaptedJsSdk {
         const reportAdIcon = document.createElement("a");
         reportAdIcon.href = `https://feedback.add-it.io/?uid=${btoa(
             this.advertiserId,
-        )}&aid=${displayedAd.ad_id}&src=web`;
+        )}&aid=${displayedAd.id}&src=web`;
         reportAdIcon.target = "_blank";
         reportAdIcon.className = "report-ad-icon";
         reportAdIcon.style.position = "absolute";
@@ -1474,7 +2640,7 @@ class AdadaptedJsSdk {
         adZoneClickableArea.onclick = (event) => {
             event.preventDefault();
 
-            this.#onAdZoneSelected(adZoneData, displayedAdIndex);
+            this.#onAdZoneSelected(zone);
         };
 
         adZoneContainer.appendChild(adZoneIFrame);
@@ -1489,7 +2655,7 @@ class AdadaptedJsSdk {
      * @param {object} currentAd - The ad to display within the popover.
      * @returns the generated ad popover.
      */
-    #generateAdPopover(currentAd) {
+    #generateAdPopover(currentAd, zone) {
         const isSafeAreaPaddingRequired = this.#needsSafeAreaPadding();
 
         let safeAreaHeaderPaddingTop = "0";
@@ -1539,7 +2705,9 @@ class AdadaptedJsSdk {
         adPopoverHeaderTitle.style.fontWeight = "bold";
         adPopoverHeaderTitle.style.margin = "10px";
         adPopoverHeaderTitle.style.color = "#333333";
-        adPopoverHeaderTitle.innerText = currentAd.popup.title_text;
+        // The API no longer serves a per-ad popup config, so the title is fixed
+        // here to match what the other AdAdapted SDKs display.
+        adPopoverHeaderTitle.textContent = this.#AD_POPOVER_TITLE;
 
         const adPopoverHeaderLoadingIndicator = document.createElement("div");
         adPopoverHeaderLoadingIndicator.className =
@@ -1576,7 +2744,10 @@ class AdadaptedJsSdk {
             const loadingIndicator = document.getElementsByClassName(
                 "AdPopup__header-loading-indicator",
             )[0];
-            loadingIndicator.parentNode.removeChild(loadingIndicator);
+            // The popover can be closed before its iframe finishes loading.
+            if (loadingIndicator && loadingIndicator.parentNode) {
+                loadingIndicator.parentNode.removeChild(loadingIndicator);
+            }
         };
 
         const adPopoverFooter = document.createElement("div");
@@ -1612,9 +2783,22 @@ class AdadaptedJsSdk {
             const popoverContainer = document.getElementById(
                 "adContentsPopoverContainer",
             );
-            popoverContainer.parentNode.removeChild(popoverContainer);
+
+            if (popoverContainer && popoverContainer.parentNode) {
+                popoverContainer.parentNode.removeChild(popoverContainer);
+            }
 
             document.body.style.overflow = this.initialBodyOverflowStyle;
+
+            // Resumed after the container is removed, so #zoneIsOnScreen sees an
+            // uncovered viewport. The clicked zone is handled separately below.
+            this.#resumeAllZoneTimers(zone);
+
+            // The ad was held while the user was engaged with it, so it rotates now
+            // rather than being replaced underneath the popover.
+            if (zone) {
+                this.#loadNextAd(zone);
+            }
         };
 
         const adPopoverFooterCloseButtonLabel = document.createElement("div");
@@ -1637,11 +2821,31 @@ class AdadaptedJsSdk {
 
     /**
      * Triggers when the user selects the ad zone.
-     * @param {object} adZoneData - The related ad zone data.
-     * @param {number} displayedAdIndex - The currently displayed ad index for the ad zone.
+     * @param {object} zone - The zone state whose ad was selected.
      */
-    #onAdZoneSelected(adZoneData, displayedAdIndex) {
-        const currentAd = adZoneData.ads[displayedAdIndex];
+    #onAdZoneSelected(zone) {
+        const currentAd = zone.currentAd;
+
+        if (!currentAd) {
+            return;
+        }
+
+        // The zone keeps showing this ad until its replacement arrives, so the
+        // clickable area stays live and a second click would report a second
+        // interaction against the same impression and stack a second popover.
+        if (zone.interactionReported) {
+            return;
+        }
+
+        zone.interactionReported = true;
+
+        // Tracks whether the ad's action type mapped to something this SDK can
+        // actually do, which is what decides if the ad has been used up.
+        let wasHandled = false;
+
+        // Set when the interaction opened the popover, which defers the rotation to
+        // the popover's close handler.
+        let opensPopover = false;
 
         if (
             this.#getOperatingSystem() !== this.#DeviceOS.DESKTOP &&
@@ -1650,8 +2854,24 @@ class AdadaptedJsSdk {
             currentAd.action_path
         ) {
             // Mobile only.
-            document.body.append(this.#generateAdPopover(currentAd));
+            // NOTE: wasHandled stays false so the shared rotation at the end of
+            //       this method is skipped. The popover is showing this exact ad,
+            //       so it rotates when the popover closes instead.
+            opensPopover = true;
+
+            document.body.append(this.#generateAdPopover(currentAd, zone));
             document.body.style.overflow = "hidden";
+
+            // Every zone is now covered, so every countdown stops here and is
+            // resumed when the overlay comes down. #zoneIsOnScreen already refuses
+            // to arm a timer behind the popover, but a countdown that was already
+            // running was never stopped: it elapsed, cleared timerRunning, and ran
+            // #loadNextAd, which cannot re-arm and so left the zone with no timer
+            // at all. That zone then stayed frozen for the life of the page, its
+            // impression uncounted, having already burned a request for an ad
+            // rendered behind the overlay. Pausing also stops that request, since
+            // a paused countdown never elapses.
+            this.#pauseAllZoneTimers();
 
             const adPopoverIFrameRef = document.getElementById("AdPopupIframe");
 
@@ -1674,23 +2894,49 @@ class AdadaptedJsSdk {
                         productDiscount,
                         productImage,
                     ) => {
-                        triggerItemClicked({
-                            tracking_id: trackingId,
-                            product_title: productTitle,
-                            product_brand: productBrand,
-                            product_category: productCategory,
-                            product_barcode: productBarcode,
-                            product_sku: retailerSku,
-                            product_discount: productDiscount,
-                            product_image: productImage,
-                        });
+                        // Routed through the same helper as every other client
+                        // callback: this one is invoked from a message handler, so
+                        // a host that throws would otherwise take out the rest of
+                        // the popover's handling with it.
+                        //
+                        // The handle is marked already reported. Opening this
+                        // popover was itself the interaction and it was reported at
+                        // that moment, so acknowledging these items must not report
+                        // a second one for the same click. The host still gets a
+                        // handle rather than nothing, because it has no way to tell
+                        // this path apart from the other one - and before it had
+                        // one, acknowledging here resolved whichever unrelated
+                        // click happened to be outstanding instead.
+                        this.#invokeClientCallback(
+                            "onAddItemsTriggered",
+                            [
+                                {
+                                    tracking_id: trackingId,
+                                    product_title: productTitle,
+                                    product_brand: productBrand,
+                                    product_category: productCategory,
+                                    product_barcode: productBarcode,
+                                    product_sku: retailerSku,
+                                    product_discount: productDiscount,
+                                    product_image: productImage,
+                                },
+                            ],
+                            this.#createAtlContent(currentAd, true),
+                        );
                     },
                 };
             }
 
+            // Sent with keepalive because a click is by construction the last
+            // thing the user does in the page: the handlers it runs open a new
+            // tab or hand control to the host, which routinely navigates away.
+            // A plain request is cancelled with the document and the click -
+            // the highest value event the SDK reports - is lost silently.
             this.#triggerReportAdEvent(
                 currentAd,
                 this.#ReportedEventType.INTERACTION,
+                undefined,
+                true,
             );
         } else if (
             ((this.#getOperatingSystem() === this.#DeviceOS.DESKTOP &&
@@ -1702,11 +2948,20 @@ class AdadaptedJsSdk {
             currentAd.action_path
         ) {
             // Only desktop and mobile external.
+            wasHandled = true;
+
             window.open(currentAd.action_path, "_blank");
 
+            // Sent with keepalive because a click is by construction the last
+            // thing the user does in the page: the handlers it runs open a new
+            // tab or hand control to the host, which routinely navigates away.
+            // A plain request is cancelled with the document and the click -
+            // the highest value event the SDK reports - is lost silently.
             this.#triggerReportAdEvent(
                 currentAd,
                 this.#ReportedEventType.INTERACTION,
+                undefined,
+                true,
             );
 
             // NOTE: Circulars will not work in their current state for desktop. Circulars will need
@@ -1719,22 +2974,42 @@ class AdadaptedJsSdk {
             currentAd.payload &&
             currentAd.payload.detailed_list_items
         ) {
-            this.lastSelectedATL = { ...currentAd };
-            this.onAddItemsTriggered(currentAd.payload.detailed_list_items);
+            wasHandled = true;
+
+            this.#invokeClientCallback(
+                "onAddItemsTriggered",
+                currentAd.payload.detailed_list_items,
+                this.#createAtlContent(currentAd),
+            );
         }
 
         if (
             currentAd.action_type !== this.#AdActionType.CONTENT &&
             this.onExternalContentAdClicked
         ) {
-            this.onExternalContentAdClicked(currentAd.ad_id);
+            this.#invokeClientCallback(
+                "onExternalContentAdClicked",
+                currentAd.id,
+            );
         }
 
-        if (this.cycleAdTimers[adZoneData.id]) {
-            clearTimeout(this.cycleAdTimers[adZoneData.id]);
+        // Interacting with an ad rotates the zone on to the next one, but only
+        // once the interaction actually did something. An action type this SDK does
+        // not handle would otherwise silently replace a perfectly good ad.
+        if (opensPopover) {
+            // Handled, but the rotation belongs to the popover's close handler.
+            return;
         }
 
-        this.#cycleDisplayedAd(adZoneData, displayedAdIndex);
+        if (wasHandled) {
+            this.#loadNextAd(zone);
+        } else {
+            console.error(
+                `Unable to handle the action type "${currentAd.action_type}" for ad "${currentAd.id}".`,
+            );
+
+            zone.interactionReported = false;
+        }
     }
 
     /**
@@ -1758,6 +3033,11 @@ class AdadaptedJsSdk {
         this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            // Reported and not read: the response is unused, and the user
+            // action that triggers it is routinely the last thing they do
+            // before closing the tab. Without keepalive that request is
+            // cancelled with the document and the signal is lost silently.
+            keepalive: true,
             headers: [
                 {
                     name: "accept",
@@ -1798,6 +3078,11 @@ class AdadaptedJsSdk {
         this.#fetchApiRequest({
             method: "POST",
             url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            // Reported and not read: the response is unused, and the user
+            // action that triggers it is routinely the last thing they do
+            // before closing the tab. Without keepalive that request is
+            // cancelled with the document and the signal is lost silently.
+            keepalive: true,
             headers: [
                 {
                     name: "accept",
@@ -1821,15 +3106,79 @@ class AdadaptedJsSdk {
      * Triggered when we need to report an ad event to the API.
      * @param {object} currentAd - The ad to send an event for.
      * @param {string} eventType - The event type for the reported event.
+     * @param {string} eventName - (optional) The event name, for event types that require one.
+     * @param {boolean} useKeepalive - If true, the request is made so it survives the page going away.
      */
-    #triggerReportAdEvent(currentAd, eventType) {
-        // The event timestamp has to be sent as a unix timestamp.
-        const currentTs = Math.round(new Date().getTime() / 1000);
+    #triggerReportAdEvent(currentAd, eventType, eventName, useKeepalive) {
+        if (!currentAd) {
+            return;
+        }
+
+        this.#sendAdEvent(
+            {
+                adId: currentAd.id,
+                zoneId: currentAd.zone_id,
+                impressionId: currentAd.impression_id,
+            },
+            eventType,
+            eventName,
+            useKeepalive,
+        );
+    }
+
+    /**
+     * Triggered when we need to report an ad zone level event to the API. These
+     * events describe the zone itself rather than any ad within it, so they carry
+     * no ad ID or impression ID.
+     * @param {string} zoneId - The ad zone the event is for.
+     * @param {string} eventType - The event type for the reported event.
+     * @param {string} eventName - (optional) The event name, for event types that require one.
+     * @param {boolean} useKeepalive - If true, the request is made so it survives the page going away.
+     */
+    #triggerReportZoneEvent(zoneId, eventType, eventName, useKeepalive) {
+        this.#sendAdEvent(
+            {
+                adId: "",
+                zoneId,
+                impressionId: "",
+            },
+            eventType,
+            eventName,
+            useKeepalive,
+        );
+    }
+
+    /**
+     * Sends a single ad event to the API.
+     * @param {object} eventTarget - What the event is about.
+     * @param {string} eventTarget.adId - The ad ID, or an empty string for zone level events.
+     * @param {string} eventTarget.zoneId - The ad zone ID.
+     * @param {string} eventTarget.impressionId - The impression ID, or an empty string for zone level events.
+     * @param {string} eventType - The event type for the reported event.
+     * @param {string} eventName - (optional) The event name, for event types that require one.
+     * @param {boolean} useKeepalive - If true, the request is made so it survives the page going away.
+     */
+    #sendAdEvent(eventTarget, eventType, eventName, useKeepalive) {
+        const event = {
+            ad_id: eventTarget.adId || "",
+            zone_id: eventTarget.zoneId || "",
+            impression_id: eventTarget.impressionId || "",
+            event_type: eventType,
+            // The event timestamp has to be sent as a unix timestamp.
+            created_at: this.#getCurrentUnixTimestamp(),
+        };
+
+        // The API expects event_name to be left off the payload entirely rather
+        // than sent as null when there isn't one.
+        if (eventName) {
+            event.event_name = eventName;
+        }
 
         // Log the taken action/event with the API.
         this.#fetchApiRequest({
             method: "POST",
-            url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/ads/events`,
+            url: `${this.apiEnv}/v/1.0.0/ad/events`,
+            keepalive: useKeepalive,
             headers: [
                 {
                     name: "Content-Type",
@@ -1842,17 +3191,10 @@ class AdadaptedJsSdk {
             ],
             requestPayload: {
                 app_id: this.apiKey,
-                session_id: this.sessionId,
+                session_id: this.#ensureSession(),
                 udid: this.advertiserId,
                 sdk_version: packageJson.version,
-                events: [
-                    {
-                        ad_id: currentAd.ad_id,
-                        impression_id: currentAd.impression_id,
-                        event_type: eventType,
-                        created_at: currentTs,
-                    },
-                ],
+                events: [event],
             },
             onError: () => {
                 console.error(
@@ -1863,127 +3205,45 @@ class AdadaptedJsSdk {
     }
 
     /**
-     * Performs all ad initialization tasks when a new ad is being displayed.
-     * @param {object} adZoneData - The ad zone object.
+     * Reports an SDK level event, such as a session being created or resumed.
+     * @param {string} eventName - The name of the event to report.
+     * @param {object} eventParams - The params to report alongside the event.
+     * @param {boolean} useKeepalive - If true, the request is made so it survives the page going away.
      */
-    #initializeAd(adZoneData) {
-        const adZoneElement = document.getElementById(
-            this.zonePlacements[adZoneData.id],
-        );
-        const adZoneDisplayedAdIndex = parseInt(
-            adZoneElement
-                .getElementsByClassName("AdZone")[0]
-                .getAttribute("data-displayedAdIndex"),
-            10,
-        );
-
-        // Create the new timer based on the new ad index.
-        this.#createAdTimer(
-            adZoneData,
-            adZoneDisplayedAdIndex,
-            adZoneData.ads[adZoneDisplayedAdIndex].refresh_time * 1000,
-        );
-
-        // Check if we need to trigger an impression event for the ad.
-        this.adZoneCurrentAdImpressionTracker[adZoneData.id] = false;
-
-        if (this.#isInViewport(adZoneElement)) {
-            this.#triggerReportAdEvent(
-                adZoneData.ads[adZoneDisplayedAdIndex],
-                this.#ReportedEventType.IMPRESSION,
-            );
-
-            this.adZoneCurrentAdImpressionTracker[adZoneData.id] = true;
-        }
-    }
-
-    /**
-     * Generates a new timer for cycling to the next ad.
-     * @param {object} adZoneData - The ad zone object.
-     * @param {number} displayedAdIndex - The currently displayed ad index for the ad zone.
-     * @param {number} timerLength - The length(in milliseconds) of the timer.
-     */
-    #createAdTimer(adZoneData, displayedAdIndex, timerLength) {
-        // This is need to ensure we do not stack up timers for the ad zone ad cycling.
-        clearTimeout(this.cycleAdTimers[adZoneData.id]);
-
-        this.cycleAdTimers[adZoneData.id] = setTimeout(() => {
-            this.#cycleDisplayedAd(adZoneData, displayedAdIndex);
-        }, timerLength);
-    }
-
-    /**
-     * Cycles to the next ad to display in the current available sequence of ads for an ad zone.
-     * @param {object} adZoneData - The ad zone object.
-     * @param {number} displayedAdIndex - The currently displayed ad index for the ad zone.
-     */
-    #cycleDisplayedAd(adZoneData, displayedAdIndex) {
-        const adContentsPopoverContainer = document.getElementById(
-            "adContentsPopoverContainer",
-        );
-
-        if (!adContentsPopoverContainer) {
-            // An ad popover is not currently displayed, so cycle the ad zone ad.
-            // NOTE: This applies to all ad zones, so ads across all ad zones will
-            //       not cycle if a popover is currently consuming the screen.
-            let nextAdIndex = 0;
-
-            if (displayedAdIndex < adZoneData.ads.length - 1) {
-                nextAdIndex = displayedAdIndex + 1;
-            }
-
-            // If no impression was ever recorded due to the ad zone never being scrolled into the viewport.
-            // Track a "non-visible" impression at this point before cycling the displayed ad.
-            if (!this.adZoneCurrentAdImpressionTracker[adZoneData.id]) {
-                this.#triggerReportAdEvent(
-                    adZoneData.ads[displayedAdIndex],
-                    this.#ReportedEventType.INVISIBLE_IMPRESSION,
+    #trackSdkEvent(eventName, eventParams, useKeepalive) {
+        this.#fetchApiRequest({
+            method: "POST",
+            url: `${this.listManagerApiEnv}/v/1/${this.deviceOs}/events`,
+            keepalive: useKeepalive,
+            headers: [
+                {
+                    name: "accept",
+                    value: "application/json",
+                },
+                {
+                    name: "x-api-key",
+                    value: this.apiKey,
+                },
+            ],
+            requestPayload: this.#buildSdkEventRequest([
+                {
+                    // "sdk", not "app" or "desktop": every event routed through
+                    // here describes the SDK's own lifecycle, not a user action,
+                    // and reporting keys off this to tell the two apart. The
+                    // native SDKs send "sdk" for these, and the platform is
+                    // already carried by the {os} path segment above.
+                    event_source: this.#ListManagerEventSource.SDK,
+                    event_name: eventName,
+                    event_timestamp: this.#getCurrentUnixTimestamp(),
+                    event_params: eventParams || {},
+                },
+            ]),
+            onError: () => {
+                console.error(
+                    `An error occurred while reporting the "${eventName}" event.`,
                 );
-            }
-
-            this.#updateAdZoneContents(adZoneData, nextAdIndex);
-        } else {
-            // Create a new timer with a timer length of just 10 seconds.
-            // This will allow us to re-check if the popup is still open
-            // quicker and handle switching to the next ad sooner instead of
-            // just restarting the current timer. We do this, because we must
-            // maintain the current ad shown or the popup will cycle to the
-            // next ad while the user is actively engaged with it. Then when
-            // the user closes the popup, the ad will cycle to the next quickly.
-            this.#createAdTimer(adZoneData, displayedAdIndex, 10000);
-        }
-    }
-
-    /**
-     * Updates the contents of the ad zone with the next ad.
-     * @param {object} adZoneData - The ad zone data object.
-     * @param {number} nextAdIndex - The ad index to display.
-     */
-    #updateAdZoneContents(adZoneData, nextAdIndex) {
-        const adZoneContainer = this.#generateAdZoneContents(
-            adZoneData,
-            nextAdIndex,
-        );
-
-        for (const adZone of this.adZones) {
-            if (adZoneData.id === adZone.zoneId) {
-                adZone.adZone = adZoneContainer;
-
-                const zonePlacementId = this.zonePlacements[adZone.zoneId];
-                const containerElement =
-                    document.getElementById(zonePlacementId);
-
-                if (zonePlacementId && containerElement) {
-                    containerElement.innerHTML = "";
-                    containerElement.appendChild(adZone.adZone);
-
-                    // Initialize the newly displayed ad.
-                    this.#initializeAd(adZoneData);
-                }
-
-                break;
-            }
-        }
+            },
+        });
     }
 
     /**
@@ -1992,11 +3252,15 @@ class AdadaptedJsSdk {
     #getKeywordIntercepts() {
         if (this.enableKeywordIntercept) {
             this.#fetchApiRequest({
-                method: "GET",
-                url: `${this.apiEnv}/v/0.9.5/${this.deviceOs}/intercepts/retrieve?aid=${this.apiKey}&sid=${this.sessionId}&uid=${this.advertiserId}&sdk=${packageJson.version}`,
+                method: "POST",
+                url: `${this.apiEnv}/v/1.0.0/intercept/retrieve`,
                 headers: [
                     {
                         name: "accept",
+                        value: "application/json",
+                    },
+                    {
+                        name: "Content-Type",
                         value: "application/json",
                     },
                     {
@@ -2004,14 +3268,19 @@ class AdadaptedJsSdk {
                         value: this.apiKey,
                     },
                 ],
+                requestPayload: {
+                    sdkId: packageJson.version,
+                    bundleId: this.bundleId,
+                    userId: this.advertiserId,
+                    zoneId: "",
+                    sessionId: this.#ensureSession(),
+                    extra: "",
+                },
                 onSuccess: (response) => {
-                    this.keywordIntercepts = response;
+                    this.keywordIntercepts =
+                        response && response.data ? response.data : undefined;
                 },
                 onError: () => {
-                    // Make sure any previous reference to the session is cleared here to avoid
-                    // reuse of incorrect session data upon the next successful initialization.
-                    this.#clearLocalStorageSessionData();
-
                     console.error(
                         "An error occurred while retieving keyword intercepts.",
                     );
@@ -2059,13 +3328,18 @@ class AdadaptedJsSdk {
                 ],
                 requestPayload: {
                     app_id: this.apiKey,
-                    session_id: this.sessionId,
+                    session_id: this.#ensureSession(),
                     udid: this.advertiserId,
                 },
                 onSuccess: (response) => {
                     const finalItemList = [];
 
-                    if (response.payloads) {
+                    // response, not just response.payloads: an empty or non-JSON
+                    // 200 resolves to null now that the body parse no longer
+                    // rejects, and reading a property off it throws out of the
+                    // handler. The intercept and ad handlers were both updated for
+                    // that; this one was missed.
+                    if (response && response.payloads) {
                         for (const payload of response.payloads) {
                             if (
                                 finalItemList.find(
@@ -2086,7 +3360,16 @@ class AdadaptedJsSdk {
                                 // The payload ID was not found in finalItemList, so add it.
                                 const detailedItemList = [];
 
-                                for (const itemData of payload.detailed_list_items) {
+                                // Hoisted rather than inlined: a payload arriving
+                                // without this field would otherwise throw out of
+                                // the whole handler, discarding the payloads
+                                // already collected in the same batch along with
+                                // the callback. The type declares it required, so
+                                // this is cheap insurance rather than a known bug.
+                                const listItems =
+                                    payload.detailed_list_items || [];
+
+                                for (const itemData of listItems) {
                                     detailedItemList.push({
                                         product_title:
                                             itemData["product_title"],
@@ -2113,13 +3396,12 @@ class AdadaptedJsSdk {
                     }
 
                     // Send the items to the client, so they can add them to the list.
-                    this.onPayloadsAvailable(finalItemList);
+                    this.#invokeClientCallback(
+                        "onPayloadsAvailable",
+                        finalItemList,
+                    );
                 },
                 onError: () => {
-                    // Make sure any previous reference to the session is cleared here to avoid
-                    // reuse of incorrect session data upon the next successful initialization.
-                    this.#clearLocalStorageSessionData();
-
                     console.error(
                         "An error occurred while requesting payload item data.",
                     );
@@ -2134,24 +3416,6 @@ class AdadaptedJsSdk {
      */
     #getCurrentUnixTimestamp() {
         return Math.round(new Date().getTime() / 1000);
-    }
-
-    /**
-     * Calculates the remaining session time until expiration.
-     * @param {number} expireSeconds - The session expiration in seconds.
-     * @returns the amount of time in milliseconds until the session expires.
-     */
-    #calculateRemainingSessionTimeUntilExpiration(expireSeconds) {
-        const expiration = new Date(0); // 0 sets the date to the epoch to start off
-        expiration.setUTCSeconds(expireSeconds);
-
-        const currentTimeMilliseconds = new Date().getTime();
-        const expirationTimeMilliseconds = expiration.getTime();
-        const totalMillisecondsUntilExpire =
-            expirationTimeMilliseconds - currentTimeMilliseconds;
-
-        // Return the amount of time until expiration minus 1 minute.
-        return totalMillisecondsUntilExpire - 60000;
     }
 
     /**
@@ -2179,14 +3443,29 @@ class AdadaptedJsSdk {
             });
         }
 
+        return this.#buildSdkEventRequest(eventList);
+    }
+
+    /**
+     * Wraps a list of SDK events in the request envelope the events API expects.
+     * @param {Array} eventList - The events to send.
+     * @returns the data required for the request.
+     */
+    #buildSdkEventRequest(eventList) {
         return {
-            session_id: this.sessionId,
+            session_id: this.#ensureSession(),
             app_id: this.apiKey,
             udid: this.advertiserId,
             events: eventList,
             sdk_version: packageJson.version,
             bundle_id: this.bundleId,
             bundle_version: this.bundleVersion,
+            // The user's retargeting decision and their locale used to travel on
+            // the session initialize request. With that request gone this is the
+            // only channel left for them, and it is the one the other SDKs already
+            // use, so an opt-out is still honoured rather than silently dropped.
+            allow_retargeting: this.allowRetargeting ? 1 : 0,
+            locale: this.deviceLocale ? this.deviceLocale : "",
         };
     }
 
@@ -2316,18 +3595,77 @@ class AdadaptedJsSdk {
     // }
 
     /**
+     * Decides whether a request can actually be sent with keepalive.
+     *
+     * The browser gives a document a single 64KB budget for keepalive request
+     * bodies, shared across every keepalive request in flight - and shared with
+     * whatever sendBeacon the host page's own analytics fire at the same moment.
+     * A request that breaches it does not degrade: fetch rejects outright and the
+     * whole body is lost. The reports that can grow are the batch ones, which send
+     * an event per item and are exactly the reports worth keeping, so an oversized
+     * body drops keepalive instead. That request is then only lost if the page
+     * really is being torn down, which is the behaviour it had before keepalive.
+     * @param {boolean} requested - Whether the caller asked for keepalive.
+     * @param {string} bodyData - The serialized request body, if there is one.
+     * @returns true if the request should be sent with keepalive.
+     */
+    #canUseKeepalive(requested, bodyData) {
+        if (!requested) {
+            return false;
+        }
+
+        if (!bodyData) {
+            return true;
+        }
+
+        // Deliberately well under the 64KB budget. The page's own beacons are drawn
+        // from the same allowance, and the count is of bytes rather than characters,
+        // so a body of multi byte characters is larger than its length suggests.
+        const keepaliveBodyByteLimit = 48 * 1024;
+        const bodyByteLength =
+            typeof TextEncoder === "function"
+                ? new TextEncoder().encode(bodyData).length
+                : bodyData.length;
+
+        if (bodyByteLength <= keepaliveBodyByteLimit) {
+            return true;
+        }
+
+        console.warn(
+            `A report of ${bodyByteLength} bytes is too large to be sent with keepalive, so it will be lost if the page closes before it completes.`,
+        );
+
+        return false;
+    }
+
+    /**
      * Handles sending an API request with the fetch API.
      * @param {object} settings - All settings to apply to the request.
      * @param {string} settings.method - The request method to use (GET, POST, etc.)
      * @param {string} settings.url - The URL to use for the request.
      * @param {Array} settings.headers - Array of all request header objects.
      * @param {object} settings.requestPayload - All data to send on the body of the request.
+     * @param {boolean} settings.keepalive - If true, the request is allowed to outlive the page.
      * @param {Function} settings.onSuccess - The method that triggers upon successful result of the request.
      * @param {Function} settings.onError - The method that triggers upon unsuccessful result of the request.
      */
     #fetchApiRequest(settings) {
         let headersData;
         let bodyData;
+
+        /**
+         * Reports the request as failed, logging the reason.
+         * @param {string} reason - Why the request is considered a failure.
+         */
+        const onRequestError = (reason) => {
+            if (reason) {
+                console.error(reason);
+            }
+
+            if (settings.onError) {
+                settings.onError();
+            }
+        };
 
         // Set the headers if needed.
         if (settings.headers) {
@@ -2348,22 +3686,228 @@ class AdadaptedJsSdk {
             method: settings.method,
             headers: headersData,
             body: bodyData,
+            // Used for the events reported as the page is going away, so the browser
+            // is allowed to finish sending them after the page is gone.
+            keepalive: this.#canUseKeepalive(settings.keepalive, bodyData),
         })
             .then(async (response) => {
-                const dataResponse = await response.json();
+                // Not every endpoint returns a body, and an error page may not be
+                // JSON at all, so a failed parse is treated as no data rather than
+                // being allowed to reject.
+                const dataResponse = await response.json().catch(() => null);
 
-                if (dataResponse.detail) {
-                    console.error(dataResponse.detail);
-                    settings.onError();
-                } else if (settings.onSuccess) {
-                    const sessionData = JSON.stringify(dataResponse);
-                    settings.onSuccess(sessionData);
-                }
+                return { response, dataResponse };
             })
-            .catch(() => {
-                settings.onError();
+            // Only the network request and the body parse are covered here.
+            // Resolving to null keeps a transport failure distinguishable from a
+            // response that came back and simply wasn't a success.
+            .catch(() => null)
+            .then((result) => {
+                if (!result) {
+                    onRequestError();
+
+                    return;
+                }
+
+                const { response, dataResponse } = result;
+
+                if (!response.ok) {
+                    // The v1.0.0 endpoints report failures as
+                    // {success: false, message}, while the older ones use {detail}.
+                    const message =
+                        dataResponse &&
+                        (dataResponse.message || dataResponse.detail);
+
+                    onRequestError(
+                        message ||
+                            `Request to ${settings.url} failed with status ${response.status}.`,
+                    );
+
+                    return;
+                }
+
+                if (dataResponse && dataResponse.detail) {
+                    onRequestError(dataResponse.detail);
+
+                    return;
+                }
+
+                if (dataResponse && dataResponse.success === false) {
+                    onRequestError(
+                        dataResponse.message ||
+                            `Request to ${settings.url} was unsuccessful.`,
+                    );
+
+                    return;
+                }
+
+                if (!settings.onSuccess) {
+                    return;
+                }
+
+                try {
+                    settings.onSuccess(dataResponse);
+                } catch (err) {
+                    // A failure while handling a good response is a bug in the SDK,
+                    // not a failed request. Routing it through onError would report
+                    // a healthy ad as unfilled and put phantom "request_failed"
+                    // events into the client's reports, so it is logged instead.
+                    console.error(
+                        `An error occurred handling the response from ${settings.url}.`,
+                        err,
+                    );
+                }
             });
     }
+
+    /**
+     * How long a session stays alive. This is a sliding window measured from the
+     * last time the page was known to be active, so a tab that stays in use keeps
+     * its session ID rather than rotating mid-use.
+     */
+    /**
+     * The SHA-256 of the API key and the advertiser ID together, which is what the
+     * stored session is keyed on.
+     *
+     * Both, because a session is one person's visit to one app. The app alone is
+     * not enough: local storage is shared across everyone who uses the browser
+     * profile, so on a shared device the next person to sign in within the session
+     * window would resume the previous person's session and the two of them would
+     * report under one session ID. Hashed rather than stored plainly because the
+     * advertiser ID identifies a user and a storage key is readable by anything on
+     * the origin.
+     *
+     * Deliberately not keyed on storeId or the recipe context. Those are sent with
+     * every ad request rather than carried by the session, and updateStoreId() and
+     * updateRecipeContextId() change them without starting a new session - keying
+     * on them would fragment one visit into a session per store.
+     */
+    #hashedSessionOwner;
+
+    /**
+     * The API environment as the plain string "prod" or "dev", as opposed to
+     * apiEnv, which is the resolved URL. Private: only the stored session key
+     * needs it, and two public fields with names this close invite picking the
+     * wrong one.
+     */
+    #apiEnvString = "prod";
+
+    /**
+     * When the current session was first created. Private: internal session
+     * bookkeeping, and getSessionId() is the supported way to observe a session.
+     */
+    #sessionCreatedAt;
+
+    /**
+     * Add to list clicks the host has been handed but has not yet confirmed
+     * reached a list, oldest first.
+     *
+     * A list rather than a single slot, and a list rather than one entry per zone,
+     * because what has to be told apart is the click - with zones serving
+     * independently, a user can click one zone's add to list ad and then another's
+     * before the host has finished with the first.
+     */
+    #pendingAtlClicks = [];
+
+    /**
+     * How many unconfirmed add to list clicks to keep. A host that never confirms
+     * would otherwise grow this list for the life of the page. Far more than any
+     * real user gets through before the first confirmation lands.
+     */
+    #MAX_PENDING_ATL_CLICKS = 25;
+
+    /**
+     * Bumped whenever the pending clicks are abandoned, which is what tells a
+     * handle the host is still holding that the SDK it belongs to has gone.
+     */
+    #atlGeneration = 0;
+
+    #SESSION_LIFETIME_MS = 30 * 60 * 1000;
+
+    /**
+     * True while a session is being replaced. Closing out the impressions that
+     * belong to the outgoing session reports events, and reporting an event asks
+     * for the session ID, which would otherwise notice the expired window and
+     * start replacing the session again from inside the replacement.
+     */
+    #sessionRotating = false;
+
+    /**
+     * The prefix identifying a session as having come from this SDK.
+     */
+    #SESSION_ID_PREFIX = "JS";
+
+    /**
+     * How often the session's last-active stamp is written through to local
+     * storage while the page is being used.
+     */
+    #SESSION_TOUCH_PERSIST_MS = 60 * 1000;
+
+    /**
+     * The number of random characters that follow the session ID prefix.
+     */
+    #SESSION_ID_LENGTH = 32;
+
+    /**
+     * The alphabet a session ID's random characters are drawn from.
+     */
+    #SESSION_ID_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+    /**
+     * The shortest search term that will be matched against keyword intercepts.
+     */
+    #MIN_KEYWORD_MATCH_LENGTH = 3;
+
+    /**
+     * How long an ad is displayed for when the API doesn't supply a refresh time.
+     */
+    #DEFAULT_AD_REFRESH_SECONDS = 60;
+
+    /**
+     * The shortest refresh time the SDK will honor, so an unexpectedly small value
+     * can't have the SDK requesting ads in a tight loop.
+     */
+    #MINIMUM_AD_REFRESH_SECONDS = 15;
+
+    /**
+     * The title displayed in the header of the ad popover.
+     */
+    #AD_POPOVER_TITLE = "Featured";
+
+    /**
+     * Enum defining the SDK level event names that get reported.
+     */
+    #SdkEventName = {
+        /**
+         * A new session ID was generated.
+         */
+        SESSION_CREATED: "SESSION_CREATED",
+        /**
+         * An existing session ID was picked back up, because the page was reopened
+         * or the browser tab was re-focused within the session window.
+         */
+        SESSION_RESUMED: "SESSION_RESUMED",
+        /**
+         * The page stopped being the user's focus, either because the tab is no
+         * longer the shown tab or because the browser itself lost focus to another
+         * application while this tab was on screen.
+         */
+        SESSION_BACKGROUNDED: "SESSION_BACKGROUNDED",
+    };
+
+    /**
+     * Enum defining why an ad zone went unfilled.
+     */
+    #ZoneUnfilledReason = {
+        /**
+         * The API answered normally but had no ad to serve.
+         */
+        NO_AD: "no_ad",
+        /**
+         * The ad request failed outright and never returned a usable response.
+         */
+        REQUEST_FAILED: "request_failed",
+    };
 
     /**
      * Enum representing possible List Manager types.
@@ -2482,13 +4026,29 @@ class AdadaptedJsSdk {
          */
         IMPRESSION: "impression",
         /**
-         * Occurs when an ad is not displayed to the user prior to cycling to the next displayable ad.
+         * Occurs when an ad that was displayed to the user stops being displayed,
+         * because it rotated out, went out of view, or the page went away.
+         * Reported at most once per ad that recorded an impression.
          */
-        INVISIBLE_IMPRESSION: "invisible_impression",
+        IMPRESSION_END: "impression_end",
         /**
          * Occurs when the user interacts with an ad.
          */
         INTERACTION: "interaction",
+        /**
+         * Occurs when an ad zone is first placed on the page.
+         * Reported for every zone, whether it ever receives an ad or not.
+         */
+        ZONE_MOUNTED: "zone_mounted",
+        /**
+         * Occurs when an ad zone is removed from the page.
+         */
+        ZONE_UNMOUNTED: "zone_unmounted",
+        /**
+         * Occurs when an ad was requested for a zone but none could be displayed.
+         * Always accompanied by a {@link #ZoneUnfilledReason} event name.
+         */
+        ZONE_UNFILLED: "zone_unfilled",
         /**
          * Occurs when the user's search term did not
          * match an available keyword intercept term.
@@ -2520,6 +4080,11 @@ class AdadaptedJsSdk {
          * The event was triggered from desktop.
          */
         DESKTOP: "desktop",
+        /**
+         * The event describes the SDK's own lifecycle rather than something the
+         * user did. Matches SDK_EVENT_TYPE in the Android SDK's EventStrings.
+         */
+        SDK: "sdk",
     };
 
     /**

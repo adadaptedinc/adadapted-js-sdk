@@ -16,31 +16,26 @@ declare class AdadaptedJsSdk {
     payloadApiEnv: string;
     deviceOs: any;
     sessionId: any;
-    sessionInfo: any;
-    adZones: any;
-    lastSelectedATL: any;
-    refreshAdZonesTimer: any;
-    refreshSessionTimer: any;
     keywordIntercepts: any;
     keywordInterceptSearchValue: string;
-    cycleAdTimers: { [key: string]: any };
     initialBodyOverflowStyle: string;
-    scrollContainerId: string;
-    scrollEventAbortController: any;
-    deviceLocale: string;
-    adZoneCurrentAdImpressionTracker: { [key: string]: boolean };
-    params: { [key: string]: any };
-    onAdZonesRefreshed: () => void;
-    onAddItemsTriggered: () => void;
-    onExternalContentAdClicked: () => void;
-    onPayloadsAvailable: () => void;
-    onAdsRetrieved: () => void;
+    scrollContainerId: string | undefined;
+    deviceLocale: string | undefined;
+    params: { [key: string]: any } | undefined;
+    onAdZoneRefreshed: (zoneId: string) => void;
+    onAddItemsTriggered: (
+        items: AdadaptedJsSdk.DetailedListItem[],
+        adContent: AdadaptedJsSdk.AtlAdContent,
+    ) => void;
+    onExternalContentAdClicked: (adId: string) => void;
+    onPayloadsAvailable: (payloads: AdadaptedJsSdk.Payload[]) => void;
+    onAdRetrieved: (zoneId: string, hasAd: boolean) => void;
     /**
      * Gets the current session ID.
      * NOTE: This is only exposed for developer validation if needed.
      * @returns the current session ID.
      */
-    getSessionId(): string;
+    getSessionId(): string | undefined;
     /**
      * Gets all available keyword intercepts.
      * NOTE: This is only exposed for developer validation if needed.
@@ -54,6 +49,15 @@ declare class AdadaptedJsSdk {
      * @returns a Promise of void.
      */
     initialize(props: AdadaptedJsSdk.InitializeProps): Promise<any>;
+    /**
+     * Reports that a recipe has been loaded using the provided context.
+     * @param recipeContextId - The recipe context ID that was used for the recipe load.
+     * @param recipContextZoneIds - All zone IDs used to load ads for the recipe context ID.
+     */
+    reportRecipeLoaded(
+        recipeContextId: string,
+        recipContextZoneIds: string[],
+    ): void;
     /**
      * Searches through available ad keywords based on provided search term.
      * @param searchTerm - The search term used to match against available keyword intercepts.
@@ -77,8 +81,27 @@ declare class AdadaptedJsSdk {
      */
     reportKeywordInterceptTermsPresented(termIds: string[]): void;
     /**
-     * Client must trigger this method when items are added to list/cart as a result of a user clicking an ad with a payload.
-     * This ensures proper click reporting for add-to-list ads, since clicks are not tracked instantly upon user click of these ad units.
+     * Confirms that the items from an "add to list" ad click reached the user's
+     * list, which is what reports that ad's interaction. Clicks on these ads are
+     * not counted at the moment of the click, because the items still have to
+     * arrive somewhere and only the host knows whether they did.
+     *
+     * @deprecated Call `acknowledge()` on the {@link AdadaptedJsSdk.AtlAdContent}
+     * handed to `onAddItemsTriggered` instead. This method cannot say which click
+     * is being confirmed, so it resolves the oldest one still outstanding, and
+     * there are two ways that goes wrong:
+     *
+     * - Ads are served per zone, so a user can click two "add to list" ads before
+     *   the first is confirmed. Confirming them out of order reports each
+     *   interaction against the wrong ad.
+     * - Items added from inside an ad popover have already had their interaction
+     *   reported, at the moment the popover opened. Calling this method for them
+     *   resolves an unrelated click instead, reporting an interaction the user
+     *   never confirmed while the popover's own add confirms nothing.
+     *
+     * The handle has neither problem: it is bound to the click it came from, and
+     * the one it hands over for a popover add is inert because that interaction
+     * was already counted.
      */
     acknowledgeAdded(): void;
     /**
@@ -193,8 +216,16 @@ declare namespace AdadaptedJsSdk {
          */
         zonePlacements?: ZonePlacements;
         /**
-         * The ID of the scroll container the ad zones are placed within.
-         * If an ID is not provided, the scoll event will be assigned to the document.
+         * The ID of the element the ad zones scroll within, used to decide when a
+         * zone is actually in front of the user. If an ID is not provided, zones are
+         * measured against the browser viewport.
+         *
+         * NOTE: When an ID is given, a zone counts as on screen while it is within
+         *       that element's visible box, which is not the same question as
+         *       whether it is within the viewport. Supply this only for a container
+         *       that is itself the scrolling region, and make sure it is an ancestor
+         *       of every placement element - a zone outside it is never reported as
+         *       visible at all, so it will never record an impression or refresh.
          */
         scrollContainerId?: string;
         /**
@@ -211,15 +242,21 @@ declare namespace AdadaptedJsSdk {
          */
         params?: InitializeParams;
         /**
-         * Callback that gets triggered when the session/zones/ads data
-         * gets refreshed and is now available for reference.
+         * Callback that gets triggered when a zone swaps the ad it is showing for
+         * a new one. Not called for a zone's first ad, only for the ones that
+         * replace it.
+         * @param zoneId - The ad zone whose ad changed.
          */
-        onAdZonesRefreshed?(): void;
+        onAdZoneRefreshed?(zoneId: string): void;
         /**
          * Callback that gets triggered when "add to list" or "add to cart" item/items are clicked.
          * @param items - The array of items to add.
+         * @param adContent - The click these items came from. Call its `acknowledge()` once the items have reached the user's list, which is what reports the ad's interaction.
          */
-        onAddItemsTriggered?(items: DetailedListItem[]): void;
+        onAddItemsTriggered?(
+            items: DetailedListItem[],
+            adContent: AtlAdContent,
+        ): void;
         /**
          * Callback that gets triggered when ads that represent external(non-app) content are clicked.
          * @param adId - The ID of the ad.
@@ -231,12 +268,12 @@ declare namespace AdadaptedJsSdk {
          */
         onPayloadsAvailable?(payloads: Payload[]): void;
         /**
-         * Callback that gets triggered when ads have been retrieved.
-         * @param adZoneAdAvailabilityMap - A mapping of all ad zones and true/false based on if ads are available for a given ad zone.
+         * Callback that gets triggered when a zone's ad request has resolved, told
+         * one zone at a time as each answers on its own schedule.
+         * @param zoneId - The ad zone the result is for.
+         * @param hasAd - True if an ad is available for that zone.
          */
-        onAdsRetrieved?(adZoneAdAvailabilityMap: {
-            [key: string]: boolean;
-        }): void;
+        onAdRetrieved?(zoneId: string, hasAd: boolean): void;
     }
 
     /**
@@ -323,20 +360,6 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
-     * Interface defining a wrapper for an {@link AdZone}.
-     */
-    export interface AdZoneInfo {
-        /**
-         * The ad zone ID.
-         */
-        zoneId: string;
-        /**
-         * The ad zone component.
-         */
-        adZone: JSX.Element;
-    }
-
-    /**
      * Interface defining a keyword search result.
      */
     export interface KeywordSearchResult {
@@ -393,6 +416,46 @@ declare namespace AdadaptedJsSdk {
          * The lower the number, the higher the priority.
          */
         priority: number;
+    }
+
+    /**
+     * One "add to list" ad click, handed to `onAddItemsTriggered` alongside the
+     * items so the confirmation can be tied back to the click that produced it.
+     *
+     * Clicking an "add to list" ad is not on its own the interaction: the items
+     * still have to reach the user's list, and only the host app knows whether
+     * they did. The handle is what says which click is being confirmed - the zone
+     * has already rotated on to its next ad by the time the host is done, and with
+     * ads served per zone there can be more than one click outstanding at once.
+     */
+    export interface AtlAdContent {
+        /**
+         * The ad the items came from.
+         */
+        adId: string;
+        /**
+         * The zone that ad was served into.
+         */
+        zoneId: string;
+        /**
+         * Whether acknowledging this click will report anything.
+         *
+         * False for items added from inside an ad popover: opening the popover was
+         * itself the interaction and it was reported then, so there is nothing left
+         * to confirm. Acknowledging one of those is harmless, it simply does
+         * nothing. Check this if the host needs to tell the two apart.
+         */
+        requiresAcknowledgement: boolean;
+        /**
+         * Reports the ad's interaction, confirming the items reached the list.
+         *
+         * Safe to call more than once, and safe to call late - including after the
+         * SDK has been unmounted or re-initialized, when it does nothing.
+         * @returns true if this call reported the interaction, false if there was
+         * nothing to report - already acknowledged, already counted at the moment
+         * the popover opened, or belonging to an SDK that has since gone away.
+         */
+        acknowledge(): boolean;
     }
 
     /**
@@ -482,122 +545,87 @@ declare namespace AdadaptedJsSdk {
     }
 
     /**
-     * The definition of a zone.
+     * The definition of the ad zone data returned for a single ad request.
      */
     export interface Zone {
         /**
-         * The zone ID.
+         * The ad to display within the zone. An ad with an empty {@link Ad.id} means
+         * the API had nothing to serve, and only its refresh_time is meaningful.
+         * Optional: a no-fill can also come back with no ad object at all, and the
+         * SDK treats both the same way.
          */
-        id: string;
+        ad?: Ad;
         /**
-         * ?
-         */
-        land_height: number;
-        /**
-         * ?
-         */
-        land_width: number;
-        /**
-         * ?
+         * The optimized height of the zone.
          */
         port_height: number;
         /**
-         * ?
+         * The optimized width of the zone.
          */
         port_width: number;
-        /**
-         * The available ads.
-         */
-        ads: Ad[];
     }
+
+    /**
+     * The available ad action types.
+     * - "c"  add to list
+     * - "e"  open a URL in a new tab
+     * - "l"  open a URL in an in-page view
+     * - "p"  open a URL in an in-page view, same behaviour as "l"
+     * - "a"  an app store URL. NOTE: not handled - the SDK logs that it cannot
+     *        action the type, reports nothing, and leaves the ad in place.
+     * - "n"  no action
+     * NOTE: Declared inside this namespace rather than at the top level of the
+     *       file, because the `export =` on line 1 cannot coexist with another top
+     *       level export - TypeScript rejects that with TS2309 in the consumer's
+     *       build, and this repo's own skipLibCheck hides it.
+     */
+    export type AdActionType = "c" | "e" | "l" | "p" | "a" | "n";
 
     /**
      * The definition of an Ad.
      */
     export interface Ad {
         /**
-         * The ad ID.
+         * The ad ID. An empty string means no ad was served.
          */
-        ad_id: string;
+        id: string;
         /**
          * The impression ID.
          */
         impression_id: string;
         /**
-         * The type of ad this is.
-         */
-        type: string;
-        /**
-         * How often the ad refreshes? Swaps out for another?
-         * Length of time in seconds.
+         * How long, in seconds, the ad is displayed for before the SDK requests the
+         * next ad for the zone. On a response with no ad, this is the backoff to
+         * wait before asking again.
          */
         refresh_time: number;
         /**
-         * The URL for the ad image to display.
+         * The URL for the ad creative to display.
          */
         creative_url: string;
         /**
-         * The tracking pixel to include in the zone view for this ad?
-         */
-        tracking_html: string;
-        /**
-         * ?
+         * The URL the ad navigates to when interacted with. An empty string when the
+         * ad's action type doesn't navigate anywhere.
          */
         action_path: string;
         /**
-         * ?
+         * What interacting with the ad does.
          */
         action_type: AdActionType;
         /**
-         * If true, the ad will be hidden after interaction.
+         * The items to add to a list or cart, for add-to-list ads.
          */
-        hide_after_interaction: boolean;
         /**
-         * ?
+         * The items an "add to list" ad carries. Optional: the API does not send it
+         * for every ad, and the SDK checks for it before reading it.
          */
-        payload: AdPayload;
+        payload?: AdPayload;
         /**
-         * ?
+         * The ID of the zone the ad was served for.
+         * NOTE: Set by the SDK rather than the API, so every reported event can name
+         *       its zone.
          */
-        popup: AdPopup;
-    }
-
-    /**
-     * The definition of an Ad Popup.
-     */
-    export interface AdPopup {
-        /**
-         * ?
-         */
-        alt_close_btn: string;
-        /**
-         * ?
-         */
-        background_color: string;
-        /**
-         * ?
-         */
-        hide_banner: boolean;
-        /**
-         * ?
-         */
-        hide_browser_nav: boolean;
-        /**
-         * ?
-         */
-        hide_close_btn: boolean;
-        /**
-         * ?
-         */
-        text_color: string;
-        /**
-         * ?
-         */
-        title_text: string;
-        /**
-         * ?
-         */
-        type: string;
+        zone_id?: string;
     }
 
     /**
@@ -605,9 +633,11 @@ declare namespace AdadaptedJsSdk {
      */
     export interface AdPayload {
         /**
-         * ?
+         * The items to add to the user's list or cart.
+         * NOTE: Optional, because the API sends an empty payload object for an ad
+         *       that carries no items.
          */
-        detailed_list_items: DetailedListItem[];
+        detailed_list_items?: DetailedListItem[];
     }
 }
 
@@ -644,5 +674,3 @@ declare namespace AdadaptedJsSdk {
 //      */
 //     NONE = "n",
 // }
-
-export type AdActionType = "c" | "e" | "l" | "p" | "a" | "n";
