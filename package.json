@@ -11,7 +11,7 @@
     ],
     "scripts": {
         "prettier-fix": "prettier --write \"*.{ts,tsx,js,jsx,json,css,scss,md}\" \"src/**/*.{ts,tsx,js,jsx,json,css,scss,md}\"",
-        "lint": "eslint --version && eslint ./",
+        "lint": "oxlint --version && oxlint --disable-nested-config",
         "compile": "tsc --version && tsc --project tsconfig.json --noEmit --noErrorTruncation --pretty",
         "test-coverage": "rm -rf coverage && jest --version && jest --coverage",
         "enable-pre-commit": "pre-commit install",
@@ -43,27 +43,21 @@
     },
     "homepage": "https://docs.adadapted.com/#/",
     "devDependencies": {
-        "@eslint/eslintrc": "^3.3.5",
-        "@eslint/js": "^10.0.1",
         "@peculiar/webcrypto": "^1.5.0",
         "@stylistic/eslint-plugin": "^5.10.0",
+        "@swc/core": "^1.16.21",
+        "@swc/jest": "^0.2.39",
         "@testing-library/jest-dom": "^7.0.0",
         "@testing-library/user-event": "^14.6.1",
         "@types/jsdom": "^30.0.0",
-        "eslint": "^10.0.0",
-        "eslint-plugin-import-x": "^4.17.1",
-        "eslint-plugin-jest": "^29.15.2",
         "eslint-plugin-jsdoc": "^65.0.0",
-        "eslint-plugin-prefer-arrow": "^1.2.3",
-        "globals": "^17.5.0",
         "jest": "^30.3.0",
         "jest-environment-jsdom": "^30.3.0",
         "jest-util": "^30.3.0",
         "jsdom": "^30.0.0",
+        "oxlint": "^1.90.0",
         "prettier": "^3.5.3",
-        "ts-jest": "^29.3.2",
-        "ts-node": "^10.9.2",
         "type-zoo": "^3.4.1",
-        "typescript": "^6.0.3"
+        "typescript": "^7.0.2"
     }
 }

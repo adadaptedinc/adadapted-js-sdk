@@ -1,0 +1,211 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["jest", "import"],
+    "jsPlugins": [
+        "@stylistic/eslint-plugin",
+        {
+            "name": "jsdoc-js",
+            "specifier": "eslint-plugin-jsdoc"
+        }
+    ],
+    "categories": {
+        "correctness": "off"
+    },
+    "env": {
+        "builtin": true,
+        "browser": true,
+        "jest": true
+    },
+    "settings": {},
+    "ignorePatterns": [
+        "__mocks__/**/*",
+        "coverage/**/*",
+        "dist/**/*",
+        "node_modules/**/*",
+        "demo/**/*"
+    ],
+    "rules": {
+        "constructor-super": "error",
+        "for-direction": "error",
+        "getter-return": "error",
+        "no-case-declarations": "error",
+        "no-class-assign": "error",
+        "no-compare-neg-zero": "error",
+        "no-cond-assign": "error",
+        "no-const-assign": "error",
+        "no-constant-binary-expression": "error",
+        "no-constant-condition": "error",
+        "no-control-regex": "error",
+        "no-debugger": "error",
+        "no-delete-var": "error",
+        "no-dupe-class-members": "error",
+        "no-dupe-else-if": "error",
+        "no-dupe-keys": "error",
+        "no-duplicate-case": "error",
+        "no-empty": "error",
+        "no-empty-character-class": "error",
+        "no-empty-pattern": "error",
+        "no-empty-static-block": "error",
+        "no-ex-assign": "error",
+        "no-extra-boolean-cast": "error",
+        "no-func-assign": "error",
+        "no-global-assign": "error",
+        "no-import-assign": "error",
+        "no-invalid-regexp": "error",
+        "no-loss-of-precision": "error",
+        "no-misleading-character-class": "error",
+        "no-new-native-nonconstructor": "error",
+        "no-nonoctal-decimal-escape": "error",
+        "no-obj-calls": "error",
+        "no-prototype-builtins": "off",
+        "no-regex-spaces": "error",
+        "no-self-assign": "error",
+        "no-setter-return": "error",
+        "no-shadow-restricted-names": "error",
+        "no-sparse-arrays": "error",
+        "no-this-before-super": "error",
+        "no-unassigned-vars": "error",
+        "no-unexpected-multiline": "error",
+        "no-unreachable": "error",
+        "no-unsafe-finally": "error",
+        "no-unsafe-negation": "error",
+        "no-unsafe-optional-chaining": "error",
+        "no-unused-labels": "error",
+        "no-unused-private-class-members": "error",
+        "no-unused-vars": "off",
+        "no-useless-backreference": "error",
+        "no-useless-catch": "error",
+        "no-useless-assignment": "error",
+        "no-with": "error",
+        "preserve-caught-error": "error",
+        "require-yield": "error",
+        "use-isnan": "error",
+        "no-array-constructor": "off",
+        "no-throw-literal": "error",
+        "@stylistic/no-extra-semi": "error",
+        "@stylistic/quotes": [
+            "error",
+            "double",
+            {
+                "avoidEscape": true,
+                "allowTemplateLiterals": "always"
+            }
+        ],
+        "eqeqeq": ["error", "smart"],
+        "guard-for-in": "error",
+        "id-denylist": [
+            "error",
+            "any",
+            "Number",
+            "number",
+            "String",
+            "string",
+            "Boolean",
+            "boolean",
+            "Undefined",
+            "undefined"
+        ],
+        "id-match": "error",
+        "import/no-default-export": "off",
+        "no-caller": "error",
+        "no-console": [
+            "error",
+            {
+                "allow": [
+                    "warn",
+                    "dir",
+                    "timeLog",
+                    "assert",
+                    "clear",
+                    "count",
+                    "countReset",
+                    "group",
+                    "groupEnd",
+                    "table",
+                    "dirxml",
+                    "error",
+                    "groupCollapsed",
+                    "Console",
+                    "profile",
+                    "profileEnd",
+                    "timeStamp",
+                    "context"
+                ]
+            }
+        ],
+        "no-empty-function": "off",
+        "no-eval": "error",
+        "no-inner-declarations": "error",
+        "no-new-wrappers": "error",
+        "no-template-curly-in-string": "error",
+        "no-underscore-dangle": "error",
+        "no-var": "error",
+        "object-shorthand": "error",
+        "one-var": ["error", "never"],
+        "prefer-const": "error",
+        "radix": "error",
+        "jsdoc-js/require-jsdoc": [
+            "error",
+            {
+                "contexts": [
+                    "TSInterfaceDeclaration",
+                    "TSTypeAliasDeclaration[modifiers='ExportKeyword']",
+                    "TSEnumDeclaration",
+                    "TSEnumMember",
+                    "ExportNamedDeclaration[declaration.type]",
+                    "ArrowFunctionExpression:not(Property ArrowFunctionExpression):not(JSXAttribute ArrowFunctionExpression):not(CallExpression ArrowFunctionExpression):not(NewExpression ArrowFunctionExpression)",
+                    "FunctionExpression:not(Property FunctionExpression)"
+                ],
+                "require": {
+                    "FunctionDeclaration": true,
+                    "MethodDefinition": true,
+                    "ClassDeclaration": true,
+                    "ArrowFunctionExpression": false,
+                    "FunctionExpression": false
+                }
+            }
+        ],
+        "jsdoc-js/check-alignment": "error",
+        "@stylistic/semi": ["error", "always"],
+        "@stylistic/spaced-comment": [
+            "error",
+            "always",
+            {
+                "markers": ["/"]
+            }
+        ],
+        "@stylistic/new-parens": "error",
+        "@stylistic/no-mixed-spaces-and-tabs": "error",
+        "@stylistic/comma-dangle": "off",
+        "jest/no-alias-methods": "error",
+        "jest/no-conditional-expect": "error",
+        "jest/no-deprecated-functions": "error",
+        "jest/no-disabled-tests": "warn",
+        "jest/no-done-callback": "error",
+        "jest/no-export": "error",
+        "jest/no-focused-tests": "error",
+        "jest/no-identical-title": "error",
+        "jest/no-interpolation-in-snapshots": "error",
+        "jest/no-jasmine-globals": "error",
+        "jest/no-mocks-import": "error",
+        "jest/no-standalone-expect": "error",
+        "jest/no-test-prefixes": "error",
+        "jest/valid-describe-callback": "error",
+        "jest/valid-expect": "error",
+        "jest/valid-title": "error"
+    },
+    "overrides": [
+        {
+            "files": ["**/*.d.ts"],
+            "rules": {
+                "no-unused-private-class-members": "off"
+            }
+        },
+        {
+            "files": ["jest.config.ts", "jest.setup.ts", "**/*.test.ts"],
+            "rules": {
+                "jsdoc-js/require-jsdoc": "off"
+            }
+        }
+    ]
+}

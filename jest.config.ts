@@ -10,7 +10,7 @@ export default async (): Promise<Config> => {
         },
         setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
         transform: {
-            "^.+\\.[j|t]sx?$": "ts-jest",
+            "^.+\\.[j|t]sx?$": "@swc/jest",
         },
         testRegex: "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
         moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],

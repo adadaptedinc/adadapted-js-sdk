@@ -83,6 +83,18 @@
             "automerge": false,
             "labels": ["deps", "infra", "github-actions", "major"],
             "reviewers": ["jeramyadadapted", "steveadadapted"]
+        },
+        {
+            "matchManagers": ["npm"],
+            "matchPackageNames": ["oxlint", "oxlint-tsgolint"],
+            "groupName": "oxlint",
+            "groupSlug": "oxlint"
+        },
+        {
+            "matchManagers": ["npm"],
+            "matchPackageNames": ["@swc/core", "@swc/jest", "swc-loader"],
+            "groupName": "swc",
+            "groupSlug": "swc"
         }
     ]
 }
