@@ -39,5 +39,5 @@ The Conventional Commits pre-commit hook is what drives the semver bump on relea
 ## Testing notes
 
 - `jest.setup.ts` polyfills `global.crypto` with Node's `crypto` because jsdom doesn't provide `crypto.subtle.digest`, which the SDK uses to hash the API key for session cache keys.
-- `__mocks__/` holds file and style mocks referenced from `jest.config.ts` `moduleNameMapper`.
+- `__mocks__/` holds file and style mocks referenced from `jest.config.js` `moduleNameMapper`.
 - `src/index.test.ts` uses fetch mocks and fake timers heavily — be careful adding new timer-based flows without corresponding `jest.useFakeTimers()` wiring in the test setup.

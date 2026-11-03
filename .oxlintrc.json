@@ -202,7 +202,7 @@
             }
         },
         {
-            "files": ["jest.config.ts", "jest.setup.ts", "**/*.test.ts"],
+            "files": ["jest.config.js", "jest.setup.ts", "**/*.test.ts"],
             "rules": {
                 "jsdoc-js/require-jsdoc": "off"
             }
