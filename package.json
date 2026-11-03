@@ -43,7 +43,7 @@
     },
     "homepage": "https://docs.adadapted.com/#/",
     "devDependencies": {
-        "@peculiar/webcrypto": "^1.5.0",
+        "@peculiar/webcrypto": "^2.0.0",
         "@stylistic/eslint-plugin": "^5.10.0",
         "@swc/core": "^1.16.21",
         "@swc/jest": "^0.2.39",
