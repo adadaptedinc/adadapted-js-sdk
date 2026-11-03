@@ -1,6 +1,9 @@
-import type { Config } from "jest";
-
-export default async (): Promise<Config> => {
+/**
+ * Jest config. Kept as plain JS so Jest can load it without TypeScript
+ * support (ts-node, or the type stripping only Node 22.18+ has).
+ * @returns {Promise<import("jest").Config>} The Jest config.
+ */
+module.exports = async () => {
     return {
         verbose: true,
         maxWorkers: 1,
@@ -10,7 +13,7 @@ export default async (): Promise<Config> => {
         },
         setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
         transform: {
-            "^.+\\.[j|t]sx?$": "ts-jest",
+            "^.+\\.[j|t]sx?$": "@swc/jest",
         },
         testRegex: "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
         moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],

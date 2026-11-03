@@ -3,7 +3,6 @@ const path = require("path");
 const autoprefixer = require("autoprefixer");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const WebpackBundleAnalyzer = require("webpack-bundle-analyzer");
 
@@ -95,17 +94,10 @@ module.exports = (env) => {
                     test: /\.(t|j)sx?$/,
                     use: [
                         {
-                            loader: "ts-loader",
-                            options: {
-                                compilerOptions: {
-                                    isolatedModules: true,
-                                    noEmitOnError: false,
-                                    sourceMap: isSourceMap,
-                                },
-                                // happyPackMode = no compiler checks and compatible with thread-loader.
-                                // fork-ts-checker-webpack-plugin will separately run compiler checks in dev mode.
-                                happyPackMode: !isServerBuild,
-                            },
+                            // swc only strips types (settings in .swcrc); type checking is done by
+                            // `npm run compile` (tsc), which the build-* scripts run.
+                            loader: "swc-loader",
+                            options: { sourceMaps: isSourceMap },
                         },
                     ],
                 },
@@ -137,7 +129,7 @@ module.exports = (env) => {
                 title: "AdAdapted: JS SDK",
             }),
             ...(!isServerBuild
-                ? [new ForkTsCheckerWebpackPlugin({ formatter: "codeframe" })]
+                ? []
                 : [new CopyWebpackPlugin({ patterns: [{ from: PATHS.publicStatic, to: `${PATHS.dist}/public` }] })]),
         ].concat(
             !isServerBuild

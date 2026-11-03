@@ -7,13 +7,14 @@
         "module": "esnext",
         "moduleResolution": "bundler",
         "allowJs": true,
-        "target": "es6",
+        "target": "es2022",
         "jsx": "react",
-        "lib": ["DOM", "DOM.Iterable", "ES6", "ES2021.String", "ScriptHost"],
+        "lib": ["DOM", "DOM.Iterable", "ES2022", "ScriptHost"],
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
         "forceConsistentCasingInFileNames": true,
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "isolatedModules": true
     },
     "include": ["./src/**/*"],
     "exclude": []
