@@ -39,7 +39,7 @@
         "react-dom": "^19.1.0"
     },
     "devDependencies": {
-        "@stylistic/eslint-plugin": "^5.10.0",
+        "@stylistic/eslint-plugin": "^6.0.0",
         "@swc/core": "^1.16.21",
         "@types/jsdom": "^30.0.0",
         "@types/react": "^19.1.3",

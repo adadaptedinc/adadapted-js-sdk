@@ -43,7 +43,7 @@
     },
     "homepage": "https://docs.adadapted.com/#/",
     "devDependencies": {
-        "@stylistic/eslint-plugin": "^5.10.0",
+        "@stylistic/eslint-plugin": "^6.0.0",
         "@swc/core": "^1.16.21",
         "@swc/jest": "^0.2.39",
         "@testing-library/jest-dom": "^7.0.0",
